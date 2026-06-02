@@ -1,0 +1,4 @@
+[
+  {"program_id": "prog_humira", "name": "myAbbVie Assist", "med_id": "m_adalimumab", "eligibility": "uninsured or underinsured; income-based"},
+  {"program_id": "prog_sildenafil", "name": "Generic Rx Savings", "med_id": "m_sildenafil", "eligibility": "open enrollment"}
+]

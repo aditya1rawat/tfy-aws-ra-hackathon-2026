@@ -1,0 +1,36 @@
+[
+  {
+    "patient_id": "p_001",
+    "name": "Maria Gomez",
+    "dob": "1958-03-12",
+    "ssn": "123-45-6789",
+    "plan_id": "plan_basic",
+    "current_meds": ["m_warfarin", "m_lisinopril"],
+    "med_history": [
+      {"med_id": "m_warfarin", "started": "2019-04-01", "stopped": null},
+      {"med_id": "m_lisinopril", "started": "2021-08-15", "stopped": null}
+    ]
+  },
+  {
+    "patient_id": "p_002",
+    "name": "James Lee",
+    "dob": "1971-09-30",
+    "ssn": "987-65-4321",
+    "plan_id": "plan_plus",
+    "current_meds": ["m_metformin"],
+    "med_history": [
+      {"med_id": "m_metformin", "started": "2020-01-10", "stopped": null}
+    ]
+  },
+  {
+    "patient_id": "p_003",
+    "name": "Aisha Khan",
+    "dob": "1985-11-02",
+    "ssn": "555-22-3333",
+    "plan_id": "plan_basic",
+    "current_meds": ["m_atorvastatin"],
+    "med_history": [
+      {"med_id": "m_atorvastatin", "started": "2022-06-20", "stopped": null}
+    ]
+  }
+]
