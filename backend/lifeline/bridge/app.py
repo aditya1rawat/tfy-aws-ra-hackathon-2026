@@ -3,6 +3,7 @@ import sqlite3
 import uuid
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel
@@ -18,6 +19,7 @@ from lifeline.batch.worker import BatchWorker
 from lifeline.bridge.runner import AgentRunner
 from lifeline.bridge.scenarios import apply_scenario
 from lifeline.chaos.controller import VALID_MODES, controller
+from lifeline.data import load_fixture
 
 
 class InteractiveRequest(BaseModel):
@@ -50,6 +52,12 @@ class ChaosClearRequest(BaseModel):
 
 def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog) -> FastAPI:
     app = FastAPI(title="Lifeline Bridge")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],          # demo: any origin; tighten for prod
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     runner = AgentRunner(deps, checkpointer=checkpointer)
     worker = BatchWorker(store, deps, checkpointer=checkpointer)
 
@@ -76,6 +84,12 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog) -> FastAP
     def batch_seed(req: SeedRequest) -> dict:
         store.seed(req.items)
         return {"seeded": len(req.items)}
+
+    @app.post("/batch/seed_fixture")
+    def batch_seed_fixture() -> dict:
+        items = load_fixture("batch_queue.json")
+        store.seed(items)
+        return {"seeded": len(items)}
 
     @app.post("/batch/run")
     def batch_run(req: RunRequest) -> dict:

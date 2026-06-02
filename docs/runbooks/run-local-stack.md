@@ -47,3 +47,25 @@ through the live TF MCP Gateway instead:
    differently.
 3. The "disable destructive tool live" demo beat: toggle `cancel_auth` off at the
    gateway — no code change; the agent simply cannot call it.
+
+## Dashboard (Next.js)
+
+```bash
+cd frontend
+pnpm install
+pnpm approve-builds   # one-time: approve sharp / unrs-resolver / msw native builds
+pnpm dev              # http://localhost:3000  (expects bridge on :8000)
+```
+
+`NEXT_PUBLIC_API_BASE` (in `frontend/.env.local`, default `http://localhost:8000`)
+points the dashboard at the bridge.
+
+Demo flow:
+1. **Interactive Run** panel → Run (`p_001` / `m_warfarin` / `refill`) → watch nodes stream node-by-node.
+2. **Chaos Controls** → click `tool_outage` → re-run interactive → it degrades/queues; **Audit Trail** shows the failed tool call.
+3. **Batch Monitor** → Seed 200 → Run with `limit=120` → stop → Run again → resumes the remaining 80 without reprocessing.
+4. **Cost / Routing** shows per-model counts (populated once the live LLM is wired via `USE_TF`).
+5. **Clear** chaos to reset.
+
+Panels poll the bridge via SWR (deduped, revalidate-on-focus); interactive uses
+`fetch` + `ReadableStream` to consume the POST SSE stream.
