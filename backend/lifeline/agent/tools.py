@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import Callable
 
@@ -63,3 +64,27 @@ class ToolGateway:
         if self._audit is not None:
             self._audit.record(server, tool, False, error=str(last_err))
         raise ToolUnavailable(f"{server}.{tool} failed after {self._retries} attempts: {last_err}")
+
+
+class MCPBackend:
+    """Call tools over MCP (FastMCP servers, optionally behind the TF MCP Gateway).
+
+    `invoke` matches InProcessBackend's signature so it drops into ToolGateway.
+    The live tool-name mapping is verified against the gateway per the runbook.
+    """
+
+    def __init__(self, base_url: str):
+        self._base_url = base_url
+
+    def _tool_name(self, server: str, tool: str) -> str:
+        return f"{server}_{tool}"
+
+    async def _acall(self, server: str, tool: str, kwargs: dict):
+        from fastmcp import Client
+
+        async with Client(self._base_url) as client:
+            result = await client.call_tool(self._tool_name(server, tool), kwargs)
+            return getattr(result, "data", result)
+
+    def invoke(self, server: str, tool: str, kwargs: dict):
+        return asyncio.run(self._acall(server, tool, kwargs))
