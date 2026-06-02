@@ -3,10 +3,12 @@ import type { AuditEvent, BatchItem, ChaosEntry, Counts } from "@/lib/types";
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "content-type": "application/json" },
-    ...init,
-  });
+  // Only set JSON content-type when there's a body: keeps GETs "simple" so the
+  // ~1-2s SWR polls don't each trigger a CORS preflight. Merge (not clobber)
+  // any caller-provided headers.
+  const headers = new Headers(init?.headers);
+  if (init?.body) headers.set("content-type", "application/json");
+  const res = await fetch(`${BASE}${path}`, { ...init, headers });
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
   return (await res.json()) as T;
 }

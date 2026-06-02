@@ -52,7 +52,7 @@ frontend/                           # CREATE (create-next-app)
       api.ts                        # CREATE: typed bridge client
       sse.ts                        # CREATE: SSE stream reader
     hooks/
-      usePolling.ts                 # CREATE: interval polling hook
+      useLive.ts                    # CREATE: SWR live-read hook (deduped interval polling)
     components/
       ui/...                        # CREATE (shadcn add)
       StatusBadge.tsx               # CREATE
@@ -68,7 +68,7 @@ frontend/                           # CREATE (create-next-app)
     __tests__/
       api.test.ts                   # CREATE
       sse.test.ts                   # CREATE
-      usePolling.test.ts            # CREATE
+      useLive.test.tsx              # CREATE
 docs/runbooks/run-local-stack.md    # MODIFY: add frontend run steps
 ```
 
@@ -496,80 +496,81 @@ git commit -m "feat: add typed bridge API client and SSE reader"
 
 ---
 
-### Task 4: Shared UI primitives + polling hook
+### Task 4: SWR live-read hook + shared UI primitives
+
+> **Shipped note:** per the `vercel:react-best-practices` skill (`client-swr-dedup`),
+> client polling uses **SWR** (`useLive` wrapping `useSWR` with `refreshInterval`),
+> not a bespoke `usePolling` effect loop — SWR dedupes identical reads across the
+> five panels and revalidates on focus. Add the dep with `pnpm add swr`.
 
 **Files:**
-- Create: `frontend/src/components/StatusBadge.tsx`, `frontend/src/components/Panel.tsx`, `frontend/src/hooks/usePolling.ts`
-- Test: `frontend/src/__tests__/usePolling.test.ts`
+- Create: `frontend/src/hooks/useLive.ts`, `frontend/src/components/StatusBadge.tsx`, `frontend/src/components/Panel.tsx`
+- Test: `frontend/src/__tests__/useLive.test.tsx`
 
 - [ ] **Step 1: Write the failing test**
 
-`frontend/src/__tests__/usePolling.test.ts`:
+`frontend/src/__tests__/useLive.test.tsx`:
 
-```ts
-import { act, renderHook, waitFor } from "@testing-library/react";
+```tsx
+import { renderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { SWRConfig } from "swr";
 import { describe, expect, it, vi } from "vitest";
-import { usePolling } from "@/hooks/usePolling";
+import { useLive } from "@/hooks/useLive";
 
-describe("usePolling", () => {
-  it("fetches immediately and exposes data", async () => {
-    const fn = vi.fn().mockResolvedValue(42);
-    const { result } = renderHook(() => usePolling(fn, 10_000));
+function wrapper({ children }: { children: ReactNode }) {
+  // Fresh cache per test; no dedupe window so re-fetches are observable.
+  return <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>{children}</SWRConfig>;
+}
+
+describe("useLive", () => {
+  it("returns fetched data", async () => {
+    const { result } = renderHook(() => useLive("k1", async () => 42), { wrapper });
     await waitFor(() => expect(result.current).toBe(42));
-    expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it("polls again on interval", async () => {
-    vi.useFakeTimers();
+  it("does not fetch when key is null", async () => {
     const fn = vi.fn().mockResolvedValue(1);
-    renderHook(() => usePolling(fn, 1000));
-    await vi.advanceTimersByTimeAsync(2500);
-    expect(fn.mock.calls.length).toBeGreaterThanOrEqual(3);
-    vi.useRealTimers();
+    renderHook(() => useLive(null, fn), { wrapper });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(fn).not.toHaveBeenCalled();
   });
 });
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run (from `frontend/`): `pnpm test usePolling`
-Expected: FAIL — `@/hooks/usePolling` does not exist.
+Run (from `frontend/`): `pnpm test useLive`
+Expected: FAIL — `@/hooks/useLive` does not exist.
 
-- [ ] **Step 3: Write the polling hook**
+- [ ] **Step 3: Write the SWR live-read hook**
 
-`frontend/src/hooks/usePolling.ts`:
+`frontend/src/hooks/useLive.ts`:
 
 ```ts
 "use client";
-import { useEffect, useRef, useState } from "react";
+import useSWR from "swr";
 
-/** Call `fn` immediately and every `intervalMs`; returns the latest result. */
-export function usePolling<T>(fn: () => Promise<T>, intervalMs: number): T | null {
-  const [data, setData] = useState<T | null>(null);
-  const fnRef = useRef(fn);
-  fnRef.current = fn;
-
-  useEffect(() => {
-    let active = true;
-    const tick = async () => {
-      try {
-        const d = await fnRef.current();
-        if (active) setData(d);
-      } catch {
-        /* transient: keep last good value */
-      }
-    };
-    void tick();
-    const id = setInterval(tick, intervalMs);
-    return () => {
-      active = false;
-      clearInterval(id);
-    };
-  }, [intervalMs]);
-
-  return data;
+/**
+ * Live-polling read keyed by a stable string so SWR dedupes identical reads
+ * across panels (client-swr-dedup). `null` key disables the fetch.
+ */
+export function useLive<T>(
+  key: string | null,
+  fetcher: () => Promise<T>,
+  refreshInterval = 1500,
+): T | null {
+  const { data } = useSWR<T>(key, fetcher, {
+    refreshInterval,
+    revalidateOnFocus: true,
+    keepPreviousData: true,
+  });
+  return data ?? null;
 }
 ```
+
+Panels pass the endpoint path as the SWR key (e.g. `useLive("/batch/status", getBatchStatus)`)
+and call `mutate("<key>")` after a write (seed/run/chaos) to revalidate immediately.
 
 - [ ] **Step 4: Write the UI primitives**
 
@@ -615,15 +616,15 @@ export function Panel({ title, action, children }: { title: string; action?: Rea
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run (from `frontend/`): `pnpm test usePolling`
-Expected: PASS — both polling tests pass.
+Run (from `frontend/`): `pnpm test useLive`
+Expected: PASS — both useLive tests pass.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 cd ..
-git add frontend/src/hooks frontend/src/components/StatusBadge.tsx frontend/src/components/Panel.tsx frontend/src/__tests__/usePolling.test.ts
-git commit -m "feat: add polling hook and shared UI primitives"
+git add frontend/src/hooks frontend/src/components/StatusBadge.tsx frontend/src/components/Panel.tsx frontend/src/__tests__/useLive.test.tsx frontend/package.json frontend/pnpm-lock.yaml
+git commit -m "feat: add SWR live-read hook and shared UI primitives"
 ```
 
 ---
@@ -646,13 +647,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/Panel";
 import { StatusBadge } from "@/components/StatusBadge";
-import { usePolling } from "@/hooks/usePolling";
+import { useLive } from "@/hooks/useLive";
 import { getBatchStatus, runBatch, seedFixture } from "@/lib/api";
 
 const ORDER = ["pending", "in_progress", "done", "queued", "escalated", "failed"];
 
 export function BatchMonitorPanel() {
-  const status = usePolling(getBatchStatus, 1500);
+  const status = useLive("/batch/status", getBatchStatus);
   const [limit, setLimit] = useState("");
   const [busy, setBusy] = useState(false);
   const counts = status?.counts ?? {};
@@ -814,13 +815,13 @@ git commit -m "feat: add interactive SSE panel"
 "use client";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/Panel";
-import { usePolling } from "@/hooks/usePolling";
+import { useLive } from "@/hooks/useLive";
 import { applyScenario, clearChaos, getChaosState } from "@/lib/api";
 
 const SCENARIOS = ["tool_outage", "slow_pharmacy", "garbage_insurer", "batch_provider_outage"];
 
 export function ChaosPanel() {
-  const state = usePolling(getChaosState, 1500);
+  const state = useLive("/chaos/state", getChaosState);
   const active = state?.active ?? [];
 
   return (
@@ -860,11 +861,11 @@ export function ChaosPanel() {
 ```tsx
 "use client";
 import { Panel } from "@/components/Panel";
-import { usePolling } from "@/hooks/usePolling";
+import { useLive } from "@/hooks/useLive";
 import { getCost } from "@/lib/api";
 
 export function CostPanel() {
-  const cost = usePolling(getCost, 2000);
+  const cost = useLive("/cost", getCost, 2000);
   const entries = Object.entries(cost?.model_counts ?? {});
 
   return (
@@ -893,11 +894,11 @@ export function CostPanel() {
 ```tsx
 "use client";
 import { Panel } from "@/components/Panel";
-import { usePolling } from "@/hooks/usePolling";
+import { useLive } from "@/hooks/useLive";
 import { getAudit } from "@/lib/api";
 
 export function AuditPanel() {
-  const audit = usePolling(getAudit, 1500);
+  const audit = useLive("/audit", getAudit);
   const events = (audit?.events ?? []).slice(-50).reverse();
 
   return (
@@ -984,7 +985,7 @@ export const metadata = {
 - [ ] **Step 3: Run the full frontend test suite**
 
 Run (from `frontend/`): `pnpm test`
-Expected: PASS — api, sse, usePolling tests all pass.
+Expected: PASS — api, sse, useLive tests all pass.
 
 - [ ] **Step 4: Production build**
 
