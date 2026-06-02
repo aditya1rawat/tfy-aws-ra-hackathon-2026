@@ -9,3 +9,7 @@ venv/
 *.sqlite
 *.db
 .DS_Store
+
+# bridge default-app local sqlite
+backend/lifeline_jobs.db
+backend/lifeline_checkpoints.db

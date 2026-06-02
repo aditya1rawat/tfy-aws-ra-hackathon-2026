@@ -32,6 +32,10 @@ class ChaosController:
     def get(self, server: str, tool: str) -> ChaosConfig:
         return self._state.get((server, tool), ChaosConfig())
 
+    def items(self) -> list[tuple[tuple[str, str], ChaosConfig]]:
+        """Snapshot of active (server, tool) → config pairs (safe to iterate)."""
+        return list(self._state.items())
+
 
 # module-level singleton shared by every tool
 controller = ChaosController()
