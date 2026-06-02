@@ -1,4 +1,7 @@
+import pytest
+
 from lifeline.agent.tools import MCPBackend
+from lifeline.chaos.controller import ToolFailure
 
 
 def test_invoke_delegates_to_acall(monkeypatch):
@@ -18,3 +21,14 @@ def test_invoke_delegates_to_acall(monkeypatch):
 def test_tool_name_mapping():
     # The gateway-facing tool name namespaces server + tool.
     assert MCPBackend("http://x")._tool_name("insurer", "submit_prior_auth") == "insurer_submit_prior_auth"
+
+
+def test_invoke_wraps_client_errors_as_toolfailure(monkeypatch):
+    # Arbitrary network/client errors must surface as ToolFailure so ToolGateway
+    # retries and degrades to ToolUnavailable instead of crashing the agent.
+    async def _boom(self, server, tool, kwargs):
+        raise RuntimeError("connection refused")
+
+    monkeypatch.setattr(MCPBackend, "_acall", _boom)
+    with pytest.raises(ToolFailure):
+        MCPBackend("http://x").invoke("chart", "get_patient_chart", {})

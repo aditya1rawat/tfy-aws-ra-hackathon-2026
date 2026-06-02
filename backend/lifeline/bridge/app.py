@@ -7,9 +7,11 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel
 
-from lifeline.agent.deps import local_deps
+from lifeline.agent.deps import Deps
+from lifeline.agent.guardrails import InProcessInteractionGuardrail
 from lifeline.agent.llm import FakeLLM, Intent
 from lifeline.agent.state import new_state
+from lifeline.agent.tools import InProcessBackend, ToolGateway
 from lifeline.audit import AuditLog
 from lifeline.batch.store import JobStore
 from lifeline.batch.worker import BatchWorker
@@ -57,12 +59,12 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog) -> FastAP
 
     @app.post("/interactive")
     def interactive(req: InteractiveRequest):
+        thread_id = req.item_id or uuid.uuid4().hex
         state = new_state(
-            item_id=req.item_id or "interactive",
+            item_id=thread_id,  # correlate state/audit with the run's thread
             patient_id=req.patient_id, request_type=req.request_type,
             med_id=req.med_id, raw_text=req.raw_text,
         )
-        thread_id = req.item_id or uuid.uuid4().hex
 
         def gen():
             for event in runner.stream(state, thread_id=thread_id):
@@ -106,7 +108,7 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog) -> FastAP
     def chaos_state() -> dict:
         active = [
             {"server": s, "tool": t, "mode": cfg.mode, "latency_s": cfg.latency_s}
-            for (s, t), cfg in controller._state.items()
+            for (s, t), cfg in controller.items()
         ]
         return {"active": active}
 
@@ -131,8 +133,11 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog) -> FastAP
 
 def _default_app() -> FastAPI:
     audit = AuditLog()
-    deps = local_deps(FakeLLM(Intent(patient_id="p_001", request_type="refill", med_id="m_warfarin")))
-    deps.tools._audit = audit  # attach audit to the in-process gateway
+    deps = Deps(
+        llm=FakeLLM(Intent(patient_id="p_001", request_type="refill", med_id="m_warfarin")),
+        tools=ToolGateway(InProcessBackend(), audit=audit),
+        guardrail=InProcessInteractionGuardrail(),
+    )
     store = JobStore("lifeline_jobs.db")
     checkpointer = SqliteSaver(sqlite3.connect("lifeline_checkpoints.db", check_same_thread=False))
     return build_app(deps=deps, store=store, checkpointer=checkpointer, audit=audit)

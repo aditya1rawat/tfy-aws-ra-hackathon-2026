@@ -71,6 +71,17 @@ def test_limit_then_resume_continues_without_reprocessing():
     assert "pending" not in second
 
 
+def test_restart_requeues_stuck_in_progress():
+    # Simulate a crash mid-item: a row stuck 'in_progress'. A fresh worker
+    # (process restart) must requeue it so resume processes it, not skip it.
+    store = JobStore(":memory:")
+    store.seed(_items(2))
+    store.claim_next()  # item_0001 → in_progress, then "crash"
+    counts = _worker(store).run_all()  # new worker == restart
+    assert counts.get("done") == 2
+    assert "in_progress" not in counts
+
+
 def test_tool_outage_marks_item_queued_not_crash():
     chaos.controller.set("chart", "get_patient_chart", "fail")
     store = JobStore(":memory:")

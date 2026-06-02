@@ -22,6 +22,11 @@ def main() -> None:
     finally:
         for p in procs:
             p.terminate()
+        for p in procs:
+            try:
+                p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                p.kill()  # force-stop any process that ignored SIGTERM
 
 
 if __name__ == "__main__":

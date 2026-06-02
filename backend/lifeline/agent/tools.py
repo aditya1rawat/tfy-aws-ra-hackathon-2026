@@ -87,4 +87,11 @@ class MCPBackend:
             return getattr(result, "data", result)
 
     def invoke(self, server: str, tool: str, kwargs: dict):
-        return asyncio.run(self._acall(server, tool, kwargs))
+        try:
+            return asyncio.run(self._acall(server, tool, kwargs))
+        except ToolFailure:
+            raise  # already a transient failure the gateway understands
+        except Exception as err:
+            # Network/client errors must look transient so ToolGateway retries
+            # and degrades to ToolUnavailable (→ queued) instead of crashing.
+            raise ToolFailure(f"{self._tool_name(server, tool)} MCP call failed: {err}") from err

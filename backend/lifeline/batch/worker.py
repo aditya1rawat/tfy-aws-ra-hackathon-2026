@@ -9,6 +9,10 @@ class BatchWorker:
     def __init__(self, store: JobStore, deps, checkpointer):
         self._store = store
         self._graph = build_graph(deps, checkpointer=checkpointer)
+        # On (re)start, reclaim items left mid-flight by a crashed run so a resume
+        # picks them up; claim_next only sees 'pending'. Mid-item node checkpoints
+        # (Plan 2) still resume the item from where it died.
+        self._store.requeue_nonterminal()
 
     def run_item(self, item: dict) -> dict:
         state = new_state(

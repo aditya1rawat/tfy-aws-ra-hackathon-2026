@@ -38,19 +38,19 @@ class JobStore:
         self._conn.commit()
 
     def claim_next(self) -> dict | None:
+        # Single atomic statement: claim exactly one pending row so concurrent
+        # callers can't grab the same item (SELECT-then-UPDATE would race).
         row = self._conn.execute(
-            "SELECT * FROM jobs WHERE status='pending' ORDER BY item_id LIMIT 1"
+            "UPDATE jobs SET status='in_progress', updated_at=? "
+            "WHERE item_id = (SELECT item_id FROM jobs WHERE status='pending' "
+            "ORDER BY item_id LIMIT 1) "
+            "RETURNING *",
+            (time.time(),),
         ).fetchone()
+        self._conn.commit()
         if row is None:
             return None
-        self._conn.execute(
-            "UPDATE jobs SET status='in_progress', updated_at=? WHERE item_id=?",
-            (time.time(), row["item_id"]),
-        )
-        self._conn.commit()
-        item = dict(row)
-        item["status"] = "in_progress"
-        return item
+        return dict(row)
 
     def mark(self, item_id: str, *, status: str, current_node: str | None = None,
              error: str | None = None, model_used: str | None = None) -> None:
