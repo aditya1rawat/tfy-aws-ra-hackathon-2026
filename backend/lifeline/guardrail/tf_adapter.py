@@ -1,0 +1,67 @@
+import json
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+from lifeline.agent.guardrails import InProcessInteractionGuardrail
+
+app = FastAPI(title="Lifeline TrueFoundry Guardrail Adapter")
+_guardrail = InProcessInteractionGuardrail()
+
+
+class Message(BaseModel):
+    role: str
+    content: str = ""
+
+
+class RequestBody(BaseModel):
+    model: str | None = None
+    messages: list[Message] = []
+
+
+class GuardrailContext(BaseModel):
+    user: dict | None = None
+    metadata: dict = {}
+
+
+class InputGuardrailRequest(BaseModel):
+    requestBody: RequestBody
+    responseBody: dict | None = None
+    config: dict = {}
+    context: GuardrailContext | None = None
+
+
+class GuardrailResponse(BaseModel):
+    verdict: bool
+    transformed: bool = False
+    result: dict | None = None
+    message: str | None = None
+
+
+def _extract_meds(req: RequestBody) -> dict | None:
+    for msg in reversed(req.messages):
+        if msg.role != "user":
+            continue
+        try:
+            data = json.loads(msg.content)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        if "existing_meds" in data and "proposed_med" in data:
+            return data
+        return None
+    return None
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
+
+
+@app.post("/guardrails/interaction", response_model=GuardrailResponse)
+def interaction(req: InputGuardrailRequest) -> GuardrailResponse:
+    meds = _extract_meds(req.requestBody)
+    if meds is None:
+        # fail open: the authoritative block is the app-owned node, not this guardrail
+        return GuardrailResponse(verdict=True, message="no interaction payload found")
+    verdict = _guardrail.check(meds["existing_meds"], meds["proposed_med"])
+    return GuardrailResponse(verdict=verdict["decision"] != "block", message=verdict["reason"])
