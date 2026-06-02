@@ -1,0 +1,23 @@
+[
+  {
+    "plan_id": "plan_basic",
+    "name": "BasicCare HMO",
+    "formulary": {
+      "m_ibuprofen": {"covered": true, "needs_prior_auth": false},
+      "m_warfarin": {"covered": true, "needs_prior_auth": false},
+      "m_lisinopril": {"covered": true, "needs_prior_auth": false},
+      "m_atorvastatin": {"covered": true, "needs_prior_auth": false},
+      "m_adalimumab": {"covered": true, "needs_prior_auth": true},
+      "m_sildenafil": {"covered": false, "needs_prior_auth": false}
+    }
+  },
+  {
+    "plan_id": "plan_plus",
+    "name": "PlusCare PPO",
+    "formulary": {
+      "m_adalimumab": {"covered": true, "needs_prior_auth": true},
+      "m_metformin": {"covered": true, "needs_prior_auth": false},
+      "m_ibuprofen": {"covered": true, "needs_prior_auth": false}
+    }
+  }
+]

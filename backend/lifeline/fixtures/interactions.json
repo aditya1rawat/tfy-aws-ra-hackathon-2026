@@ -1,0 +1,6 @@
+[
+  {"drug_a": "warfarin", "drug_b": "ibuprofen", "severity": "severe", "reason": "NSAID increases bleeding risk with anticoagulant"},
+  {"drug_a": "warfarin", "drug_b": "aspirin", "severity": "severe", "reason": "additive bleeding risk"},
+  {"drug_a": "sildenafil", "drug_b": "nitroglycerin", "severity": "contraindicated", "reason": "profound hypotension"},
+  {"drug_a": "lisinopril", "drug_b": "ibuprofen", "severity": "moderate", "reason": "NSAID reduces ACE-inhibitor efficacy; renal risk"}
+]
