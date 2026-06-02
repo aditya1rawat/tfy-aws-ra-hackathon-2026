@@ -113,3 +113,14 @@ def test_cost_counts_reports_model_usage(client):
     client.post("/batch/run", json={})
     # structured batch items skip the LLM (model_used None) → counts may be empty, endpoint still 200
     assert client.get("/cost").status_code == 200
+
+
+def test_cors_header_present(client):
+    r = client.get("/health", headers={"Origin": "http://localhost:3000"})
+    assert r.headers.get("access-control-allow-origin") in ("*", "http://localhost:3000")
+
+
+def test_seed_fixture_loads_200(client):
+    out = client.post("/batch/seed_fixture").json()
+    assert out["seeded"] == 200
+    assert client.get("/batch/status").json()["counts"]["pending"] == 200
