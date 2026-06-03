@@ -23,6 +23,9 @@ export const getBatchItems = (status?: string) =>
 export const seedFixture = () =>
   req<{ seeded: number }>("/batch/seed_fixture", { method: "POST" });
 
+export const seedDemo = () =>
+  req<{ seeded: number }>("/batch/seed_demo", { method: "POST" });
+
 export const runBatch = (limit?: number) =>
   req<{ counts: Counts }>("/batch/run", {
     method: "POST",
