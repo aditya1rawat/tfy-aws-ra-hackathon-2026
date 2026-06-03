@@ -23,6 +23,34 @@ def test_tool_name_mapping():
     assert MCPBackend("http://x")._tool_name("insurer", "submit_prior_auth") == "insurer_submit_prior_auth"
 
 
+def test_acall_passes_bearer_auth_to_client(monkeypatch):
+    import fastmcp
+
+    captured = {}
+
+    class _FakeClient:
+        def __init__(self, url, auth=None):
+            captured["url"] = url
+            captured["auth"] = auth
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        async def call_tool(self, name, kwargs):
+            return {"ok": True}
+
+    monkeypatch.setattr(fastmcp, "Client", _FakeClient)
+    MCPBackend("https://gw/mcp", api_key="tfy-token").invoke("chart", "get_patient_chart", {})
+    assert captured["auth"] == "tfy-token"
+
+    captured.clear()
+    MCPBackend("http://127.0.0.1:8009/mcp").invoke("chart", "get_patient_chart", {})
+    assert captured["auth"] is None  # no key → no auth header
+
+
 def test_invoke_wraps_client_errors_as_toolfailure(monkeypatch):
     # Arbitrary network/client errors must surface as ToolFailure so ToolGateway
     # retries and degrades to ToolUnavailable instead of crashing the agent.

@@ -149,7 +149,9 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog) -> FastAP
 def _select_backend(settings: Settings):
     """Route tool calls through the MCP gateway when configured, else in-process."""
     if settings.mcp_gateway_url:
-        return MCPBackend(settings.mcp_gateway_url)
+        # Pass the TF token so an authenticated gateway accepts the call;
+        # harmless against the no-auth local aggregator.
+        return MCPBackend(settings.mcp_gateway_url, api_key=settings.api_key)
     return InProcessBackend()
 
 

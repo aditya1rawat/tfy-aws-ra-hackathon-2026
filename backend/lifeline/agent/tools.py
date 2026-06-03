@@ -73,8 +73,11 @@ class MCPBackend:
     The live tool-name mapping is verified against the gateway per the runbook.
     """
 
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, api_key: str | None = None):
         self._base_url = base_url
+        # Bearer token for an authenticated gateway (e.g. TF). None/"" → no auth
+        # header (the local aggregator needs none).
+        self._api_key = api_key or None
 
     def _tool_name(self, server: str, tool: str) -> str:
         return f"{server}_{tool}"
@@ -82,7 +85,7 @@ class MCPBackend:
     async def _acall(self, server: str, tool: str, kwargs: dict):
         from fastmcp import Client
 
-        async with Client(self._base_url) as client:
+        async with Client(self._base_url, auth=self._api_key) as client:
             result = await client.call_tool(self._tool_name(server, tool), kwargs)
             return getattr(result, "data", result)
 
