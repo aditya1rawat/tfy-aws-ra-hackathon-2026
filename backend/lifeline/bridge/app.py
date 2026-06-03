@@ -39,6 +39,10 @@ class RunRequest(BaseModel):
     limit: int | None = None
 
 
+class RequeueRequest(BaseModel):
+    statuses: list[str] = ["queued"]
+
+
 class ChaosSetRequest(BaseModel):
     server: str
     tool: str
@@ -95,6 +99,12 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog) -> FastAP
     @app.post("/batch/run")
     def batch_run(req: RunRequest) -> dict:
         return {"counts": worker.run_all(limit=req.limit)}
+
+    @app.post("/batch/requeue")
+    def batch_requeue(req: RequeueRequest) -> dict:
+        """Requeue degraded items (default: queued) for a fresh retry — the
+        recovery beat after a tool outage clears."""
+        return {"requeued": store.requeue(tuple(req.statuses))}
 
     @app.get("/batch/status")
     def batch_status() -> dict:

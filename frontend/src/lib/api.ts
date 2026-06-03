@@ -29,6 +29,12 @@ export const runBatch = (limit?: number) =>
     body: JSON.stringify({ limit: limit ?? null }),
   });
 
+export const requeueBatch = (statuses: string[] = ["queued"]) =>
+  req<{ requeued: number }>("/batch/requeue", {
+    method: "POST",
+    body: JSON.stringify({ statuses }),
+  });
+
 export const getChaosState = () => req<{ active: ChaosEntry[] }>("/chaos/state");
 
 export const setChaos = (b: { server: string; tool: string; mode: string; latency_s?: number }) =>

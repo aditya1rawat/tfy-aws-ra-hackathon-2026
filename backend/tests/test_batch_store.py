@@ -66,3 +66,29 @@ def test_requeue_nonterminal_resets_in_progress(store):
     store.claim_next()  # item_0001 → in_progress
     store.requeue_nonterminal()
     assert store.get("item_0001")["status"] == "pending"
+
+
+def test_requeue_nonterminal_keeps_attempt(store):
+    store.seed(_ITEMS)
+    store.claim_next()
+    store.requeue_nonterminal()
+    assert store.get("item_0001")["attempt"] == 0  # crash-resume keeps the thread
+
+
+def test_requeue_resets_queued_and_bumps_attempt(store):
+    store.seed(_ITEMS)
+    store.claim_next()
+    store.mark("item_0001", status="queued")
+    n = store.requeue(("queued",))
+    assert n == 1
+    row = store.get("item_0001")
+    assert row["status"] == "pending"
+    assert row["attempt"] == 1  # fresh thread for retry
+
+
+def test_requeue_ignores_done(store):
+    store.seed(_ITEMS)
+    store.claim_next()
+    store.mark("item_0001", status="done")
+    assert store.requeue(("queued",)) == 0
+    assert store.get("item_0001")["status"] == "done"

@@ -76,6 +76,17 @@ def test_batch_items_filter(client):
     assert rows[0]["item_id"] == "item_0001"
 
 
+def test_batch_requeue_recovers_after_outage(client):
+    items = [{"item_id": f"item_{i:04d}", "patient_id": "p_002", "request_type": "refill",
+              "med_id": "m_ibuprofen", "status": "pending"} for i in range(1, 3)]
+    client.post("/batch/seed", json={"items": items})
+    client.post("/chaos/scenario/batch_provider_outage")  # chart get_patient_chart fail
+    assert client.post("/batch/run", json={}).json()["counts"].get("queued") == 2
+    client.post("/chaos/clear", json={})
+    assert client.post("/batch/requeue", json={}).json()["requeued"] == 2
+    assert client.post("/batch/run", json={}).json()["counts"].get("done") == 2
+
+
 def test_chaos_set_clear_and_state(client):
     r = client.post("/chaos/set", json={"server": "insurer", "tool": "submit_prior_auth", "mode": "fail"})
     assert r.json()["ok"] is True
