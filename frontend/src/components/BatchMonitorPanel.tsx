@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/Panel";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useLive } from "@/hooks/useLive";
-import { getBatchStatus, runBatch, seedFixture } from "@/lib/api";
+import { getBatchStatus, requeueBatch, runBatch, seedFixture } from "@/lib/api";
 
 const ORDER = ["pending", "in_progress", "done", "queued", "escalated", "failed"];
 const STATUS_KEY = "/batch/status";
@@ -37,6 +37,17 @@ export function BatchMonitorPanel() {
       setBusy(false);
     }
   };
+  const onRequeue = async () => {
+    setBusy(true);
+    try {
+      await requeueBatch();
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const hasQueued = (counts.queued ?? 0) > 0;
 
   return (
     <Panel
@@ -51,6 +62,9 @@ export function BatchMonitorPanel() {
           />
           <Button size="sm" variant="secondary" disabled={busy} onClick={onSeed}>Seed 200</Button>
           <Button size="sm" disabled={busy} onClick={onRun}>Run</Button>
+          {hasQueued ? (
+            <Button size="sm" variant="outline" disabled={busy} onClick={onRequeue}>Requeue</Button>
+          ) : null}
         </div>
       }
     >
