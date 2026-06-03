@@ -19,6 +19,7 @@ class Settings:
     fallback_model: str
     guardrail_url: str
     checkpoint_db_path: str
+    mcp_gateway_url: str
 
 
 def get_settings() -> Settings:
@@ -34,4 +35,7 @@ def get_settings() -> Settings:
         fallback_model=os.environ.get("TF_FALLBACK_MODEL", "bedrock-main/meta.llama3-1-8b"),
         guardrail_url=os.environ.get("GUARDRAIL_URL", "http://127.0.0.1:8010"),
         checkpoint_db_path=os.environ.get("CHECKPOINT_DB_PATH", "lifeline_checkpoints.db"),
+        # When set, the bridge routes tool calls through this MCP gateway URL
+        # (TF virtual MCP, or the local aggregator) instead of the in-process backend.
+        mcp_gateway_url=os.environ.get("MCP_GATEWAY_URL", ""),
     )

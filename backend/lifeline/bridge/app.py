@@ -12,8 +12,9 @@ from lifeline.agent.deps import Deps
 from lifeline.agent.guardrails import InProcessInteractionGuardrail
 from lifeline.agent.llm import FakeLLM, Intent
 from lifeline.agent.state import new_state
-from lifeline.agent.tools import InProcessBackend, ToolGateway
+from lifeline.agent.tools import InProcessBackend, MCPBackend, ToolGateway
 from lifeline.audit import AuditLog
+from lifeline.config import Settings, get_settings
 from lifeline.batch.store import JobStore
 from lifeline.batch.worker import BatchWorker
 from lifeline.bridge.runner import AgentRunner
@@ -145,11 +146,21 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog) -> FastAP
     return app
 
 
+def _select_backend(settings: Settings):
+    """Route tool calls through the MCP gateway when configured, else in-process."""
+    if settings.mcp_gateway_url:
+        # Pass the TF token so an authenticated gateway accepts the call;
+        # harmless against the no-auth local aggregator.
+        return MCPBackend(settings.mcp_gateway_url, api_key=settings.api_key)
+    return InProcessBackend()
+
+
 def _default_app() -> FastAPI:
+    settings = get_settings()
     audit = AuditLog()
     deps = Deps(
         llm=FakeLLM(Intent(patient_id="p_001", request_type="refill", med_id="m_warfarin")),
-        tools=ToolGateway(InProcessBackend(), audit=audit),
+        tools=ToolGateway(_select_backend(settings), audit=audit),
         guardrail=InProcessInteractionGuardrail(),
     )
     store = JobStore("lifeline_jobs.db")

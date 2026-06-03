@@ -33,20 +33,44 @@ curl -s localhost:8000/chaos/state
 curl -s -X POST localhost:8000/chaos/clear -d '{}'
 ```
 
-## Wiring tools through the TF MCP Gateway (demo)
+## Routing tools through an MCP gateway
 
-By default the bridge uses the **in-process** tool backend. To route tool calls
-through the live TF MCP Gateway instead:
+By default the bridge uses the **in-process** tool backend. Set
+`MCP_GATEWAY_URL` in `backend/.env` to route every tool call through an MCP
+gateway instead — `_select_backend` swaps the bridge to `MCPBackend(url)` with
+no code change. The gateway must expose tools namespaced as `<server>_<tool>`
+(the form `MCPBackend._tool_name` builds).
 
-1. Start the MCP servers (step 1 above) and register them behind the virtual MCP
-   `lifeline-tools` in the TF console (see `tf-console-setup.md`); **disable
-   `cancel_auth`** at the gateway.
-2. Swap the bridge's tool backend to `MCPBackend(<gateway-url>)` (see
-   `lifeline/agent/tools.py`) and confirm the gateway tool-name mapping matches
-   `MCPBackend._tool_name` (`<server>_<tool>`); adjust if the gateway namespaces
-   differently.
-3. The "disable destructive tool live" demo beat: toggle `cancel_auth` off at the
-   gateway — no code change; the agent simply cannot call it.
+### Local gateway (faithful stand-in for the TF virtual MCP)
+
+`run_gateway.py` composes the five mock servers into one FastMCP gateway named
+`lifeline-tools`, namespaced per domain, with the destructive `cancel_auth`
+**disabled at the gateway**:
+
+```bash
+cd backend
+.venv/bin/python -m lifeline.scripts.run_gateway     # http://127.0.0.1:8009/mcp
+# then point the bridge at it and restart:
+#   MCP_GATEWAY_URL=http://127.0.0.1:8009/mcp
+.venv/bin/uvicorn lifeline.bridge.app:app --port 8000
+```
+
+Verified end-to-end: read + write tools roundtrip over HTTP MCP, a full batch
+runs through the agent graph, every call is audited, and `cancel_auth` returns
+`ToolUnavailable` because it is absent from the gateway.
+
+### Live TF MCP Gateway (demo)
+
+1. Register the five MCP servers behind the virtual MCP `lifeline-tools` in the
+   TF console (see `tf-console-setup.md`); **disable `cancel_auth`** at the
+   gateway. (Gateway/virtual-MCP creation is console-only — the `tfy` CLI is
+   deploy/apply/ml only and cannot create it.) The servers must be
+   gateway-reachable (deploy to TF or tunnel — localhost won't be reachable).
+2. Set `MCP_GATEWAY_URL=<tf-gateway-url>` and restart the bridge. Confirm the
+   gateway namespaces tools as `<server>_<tool>`; adjust `MCPBackend._tool_name`
+   if it differs.
+3. Demo beat — "disable destructive tool live": toggle `cancel_auth` off at the
+   gateway; no code change, the agent simply cannot call it.
 
 ## Dashboard (Next.js)
 
