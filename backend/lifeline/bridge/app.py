@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from lifeline.agent.deps import Deps
 from lifeline.agent.guardrails import InProcessInteractionGuardrail
-from lifeline.agent.llm import FakeLLM, Intent
+from lifeline.agent.llm import FakeLLM, Intent, ResilientLLM, TFGatewayLLM
 from lifeline.agent.state import new_state
 from lifeline.agent.tools import InProcessBackend, MCPBackend, ToolGateway
 from lifeline.audit import AuditLog
@@ -37,6 +37,25 @@ class SeedRequest(BaseModel):
 
 class RunRequest(BaseModel):
     limit: int | None = None
+
+
+# Free-text care-coordinator requests (valid fixture ids) that go through the
+# LLM intake — used by /batch/seed_demo to populate the cost/routing panel.
+_DEMO_FREETEXT = [
+    {"item_id": f"demo_{i:04d}", "patient_id": "p_002", "request_type": "refill",
+     "med_id": "m_ibuprofen", "status": "pending", "raw_text": text}
+    for i, text in enumerate(
+        [
+            "Hi, patient p_002 needs a refill of m_ibuprofen.",
+            "Can you process a refill of m_ibuprofen for patient p_002?",
+            "Refill request: m_ibuprofen, patient p_002.",
+            "Patient p_002 is out of m_ibuprofen — please refill.",
+            "Please approve a m_ibuprofen refill for p_002.",
+            "p_002 needs more m_ibuprofen, refill it.",
+        ],
+        start=1,
+    )
+]
 
 
 class RequeueRequest(BaseModel):
@@ -95,6 +114,13 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog) -> FastAP
         items = load_fixture("batch_queue.json")
         store.seed(items)
         return {"seeded": len(items)}
+
+    @app.post("/batch/seed_demo")
+    def batch_seed_demo() -> dict:
+        """Seed free-text requests that exercise the LLM intake (populates the
+        cost/routing panel when USE_TF routes to live models)."""
+        store.seed(_DEMO_FREETEXT)
+        return {"seeded": len(_DEMO_FREETEXT)}
 
     @app.post("/batch/run")
     def batch_run(req: RunRequest) -> dict:
@@ -165,11 +191,20 @@ def _select_backend(settings: Settings):
     return InProcessBackend()
 
 
+def _select_llm(settings: Settings):
+    """Live TF models (primary→fallback) when USE_TF, else a deterministic FakeLLM."""
+    if settings.use_tf:
+        primary = TFGatewayLLM(settings.gateway_base_url, settings.api_key, settings.primary_model)
+        fallback = TFGatewayLLM(settings.gateway_base_url, settings.api_key, settings.fallback_model)
+        return ResilientLLM([primary, fallback])
+    return FakeLLM(Intent(patient_id="p_001", request_type="refill", med_id="m_warfarin"))
+
+
 def _default_app() -> FastAPI:
     settings = get_settings()
     audit = AuditLog()
     deps = Deps(
-        llm=FakeLLM(Intent(patient_id="p_001", request_type="refill", med_id="m_warfarin")),
+        llm=_select_llm(settings),
         tools=ToolGateway(_select_backend(settings), audit=audit),
         guardrail=InProcessInteractionGuardrail(),
     )

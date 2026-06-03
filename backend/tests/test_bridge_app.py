@@ -117,6 +117,14 @@ def test_audit_trail_records_batch_tool_calls(client):
     assert any(e["server"] == "pharmacy" and e["tool"] == "approve_refill" for e in events)
 
 
+def test_seed_demo_runs_through_llm_and_populates_cost(client):
+    # Free-text demo items hit the LLM intake → model_used recorded → cost non-empty.
+    assert client.post("/batch/seed_demo").json()["seeded"] == 6
+    assert client.post("/batch/run", json={}).json()["counts"]["done"] == 6
+    model_counts = client.get("/cost").json()["model_counts"]
+    assert sum(model_counts.values()) == 6  # every item recorded a model
+
+
 def test_cost_counts_reports_model_usage(client):
     items = [{"item_id": "item_0001", "patient_id": "p_002", "request_type": "refill",
               "med_id": "m_ibuprofen", "status": "pending"}]

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     current_node TEXT,
     error        TEXT,
     model_used   TEXT,
+    raw_text     TEXT,
     attempt      INTEGER NOT NULL DEFAULT 0,
     updated_at   REAL
 )
@@ -32,9 +33,9 @@ class JobStore:
         now = time.time()
         self._conn.executemany(
             "INSERT OR IGNORE INTO jobs "
-            "(item_id, patient_id, request_type, med_id, status, updated_at) "
-            "VALUES (:item_id, :patient_id, :request_type, :med_id, 'pending', :updated_at)",
-            [{**it, "updated_at": now} for it in items],
+            "(item_id, patient_id, request_type, med_id, status, raw_text, updated_at) "
+            "VALUES (:item_id, :patient_id, :request_type, :med_id, 'pending', :raw_text, :updated_at)",
+            [{"raw_text": None, **it, "updated_at": now} for it in items],
         )
         self._conn.commit()
 
