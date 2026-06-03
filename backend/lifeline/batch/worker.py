@@ -19,7 +19,10 @@ class BatchWorker:
             item_id=item["item_id"], patient_id=item["patient_id"],
             request_type=item["request_type"], med_id=item["med_id"],
         )
-        out = self._graph.invoke(state, {"configurable": {"thread_id": item["item_id"]}})
+        # Thread carries the attempt so a requeued (degraded) item runs fresh
+        # instead of resuming its completed degraded checkpoint.
+        thread_id = f"{item['item_id']}#{item.get('attempt', 0)}"
+        out = self._graph.invoke(state, {"configurable": {"thread_id": thread_id}})
         self._store.mark(
             item["item_id"], status=out["status"], current_node=out.get("current_node"),
             error=out.get("error"), model_used=out.get("model_used"),

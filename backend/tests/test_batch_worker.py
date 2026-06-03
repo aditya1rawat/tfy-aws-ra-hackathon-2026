@@ -88,3 +88,18 @@ def test_tool_outage_marks_item_queued_not_crash():
     store.seed(_items(2))
     counts = _worker(store).run_all()
     assert counts.get("queued") == 2      # degraded, never crashed
+
+
+def test_requeue_recovers_queued_items_after_outage_clears():
+    store = JobStore(":memory:")
+    store.seed(_items(3))
+    worker = _worker(store)
+
+    chaos.controller.set("chart", "get_patient_chart", "fail")
+    assert worker.run_all().get("queued") == 3      # outage → all degraded
+
+    chaos.controller.clear_all()
+    assert store.requeue(("queued",)) == 3          # operator requeues
+    counts = worker.run_all()                       # fresh retry → recover
+    assert counts.get("done") == 3
+    assert "queued" not in counts

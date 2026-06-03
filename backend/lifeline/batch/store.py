@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     current_node TEXT,
     error        TEXT,
     model_used   TEXT,
+    attempt      INTEGER NOT NULL DEFAULT 0,
     updated_at   REAL
 )
 """
@@ -87,8 +88,24 @@ class JobStore:
         return {r["model_used"]: r["c"] for r in rows}
 
     def requeue_nonterminal(self) -> None:
-        """Reset pending/in_progress rows to pending (call on worker restart)."""
+        """Reset pending/in_progress rows to pending (call on worker restart).
+
+        Attempt is unchanged so a crashed item resumes on its existing thread.
+        """
         self._conn.execute(
             f"UPDATE jobs SET status='pending' WHERE status IN {_NONTERMINAL}"
         )
         self._conn.commit()
+
+    def requeue(self, statuses: tuple[str, ...] = ("queued",)) -> int:
+        """Reset degraded items (default: queued) to pending for a fresh retry and
+        bump their attempt, so the worker runs them on a new thread (not a no-op
+        resume of the completed degraded run). Returns the number requeued."""
+        placeholders = ",".join("?" * len(statuses))
+        cur = self._conn.execute(
+            f"UPDATE jobs SET status='pending', attempt=attempt+1, updated_at=? "
+            f"WHERE status IN ({placeholders})",
+            (time.time(), *statuses),
+        )
+        self._conn.commit()
+        return cur.rowcount
