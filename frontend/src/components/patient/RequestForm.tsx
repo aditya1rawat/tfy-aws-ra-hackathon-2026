@@ -17,15 +17,15 @@ export function RequestForm({ onSubmit, busy }: { onSubmit: (medId: string, reas
       <select
         value={medId}
         onChange={(e) => setMedId(e.target.value)}
-        className="h-9 w-full rounded-md border px-2 text-sm"
+        className="h-11 w-full rounded-md border px-3 text-sm"
       >
         {OPTIONS.map((o) => <option key={o.med_id} value={o.med_id}>{o.label}</option>)}
       </select>
-      <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason" className="h-9" />
+      <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason" className="h-11" />
       <div className="rounded-md bg-zinc-100 p-2 text-xs text-zinc-500">
         We&apos;ll check this against your current meds before it&apos;s approved.
       </div>
-      <Button className="w-full" disabled={busy} onClick={() => onSubmit(medId, reason)}>
+      <Button className="h-11 w-full text-sm" disabled={busy} onClick={() => onSubmit(medId, reason)}>
         {busy ? "Submitting…" : "Submit request"}
       </Button>
     </div>

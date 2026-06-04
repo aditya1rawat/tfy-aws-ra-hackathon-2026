@@ -47,9 +47,9 @@ export default function XrayPage() {
         </section>
       </div>
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2"><BatchMonitorPanel /></div>
-        <div><CostPanel /></div>
-        <div className="lg:col-span-3"><AuditPanel /></div>
+        <div className="lg:col-span-2"><BatchMonitorPanel tone="dark" /></div>
+        <div><CostPanel tone="dark" /></div>
+        <div className="lg:col-span-3"><AuditPanel tone="dark" /></div>
       </div>
     </main>
   );

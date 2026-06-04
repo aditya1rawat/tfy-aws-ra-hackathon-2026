@@ -16,7 +16,7 @@ export function OutcomeCard({ narrative }: { narrative: RequestNarrative }) {
       {accepted ? (
         <div className="text-center text-xs text-green-700">Alternative accepted ✓</div>
       ) : (
-        <Button size="sm" className="w-full" onClick={() => setAccepted(true)}>
+        <Button className="h-10 w-full" onClick={() => setAccepted(true)}>
           Accept alternative
         </Button>
       )}
