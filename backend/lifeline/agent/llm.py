@@ -89,3 +89,33 @@ class TFGatewayLLM:
             return self._structured.invoke(_INTENT_PROMPT.format(text=text))
         except Exception as err:  # network/429/provider error → uniform signal for ResilientLLM
             raise LLMUnavailable(f"{self.name}: {err}") from err
+
+
+# --- App-level LLM chaos lever (demo: force the primary model to fail) ---
+_llm_chaos = {"killed": False}
+
+
+def set_llm_killed(killed: bool) -> None:
+    """Toggle the global LLM chaos flag (used by ChaosLLM)."""
+    _llm_chaos["killed"] = bool(killed)
+
+
+def is_llm_killed() -> bool:
+    return _llm_chaos["killed"]
+
+
+class ChaosLLM:
+    """Wrap an LLM client; raise LLMUnavailable while the chaos flag is set.
+
+    Lets the presenter kill the primary model on demand so ResilientLLM falls
+    back — the live model-fallback beat, offline or against the gateway.
+    """
+
+    def __init__(self, inner: LLMClient):
+        self._inner = inner
+        self.name = inner.name
+
+    def parse_intent(self, text: str) -> Intent:
+        if is_llm_killed():
+            raise LLMUnavailable(f"{self.name}: killed by chaos")
+        return self._inner.parse_intent(text)
