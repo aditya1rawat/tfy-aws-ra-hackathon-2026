@@ -110,3 +110,9 @@ class JobStore:
         )
         self._conn.commit()
         return cur.rowcount
+
+    def clear(self) -> int:
+        """Wipe the whole queue (demo kill switch). Returns the number removed."""
+        cur = self._conn.execute("DELETE FROM jobs")
+        self._conn.commit()
+        return cur.rowcount

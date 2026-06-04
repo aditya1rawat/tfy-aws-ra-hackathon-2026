@@ -30,10 +30,19 @@ class BatchWorker:
         )
         return out
 
-    def run_all(self, limit: int | None = None) -> dict:
-        """Process pending items until exhausted or `limit` items handled. Returns status counts."""
+    def run_all(self, limit: int | None = None, *, control=None) -> dict:
+        """Process pending items until exhausted or `limit` items handled.
+
+        When a `control` (BatchControl) is given, the loop cooperatively pauses
+        and stops on cancel — checked between items, so live demo pause/kill work
+        without corrupting an in-flight item. Returns status counts.
+        """
         processed = 0
         while limit is None or processed < limit:
+            if control is not None:
+                control.wait_if_paused()
+                if control.cancelled:
+                    break
             item = self._store.claim_next()
             if item is None:
                 break

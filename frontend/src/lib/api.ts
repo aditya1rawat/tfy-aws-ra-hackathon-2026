@@ -41,6 +41,25 @@ export const requeueBatch = (statuses: string[] = ["queued"]) =>
     body: JSON.stringify({ statuses }),
   });
 
+export interface BatchControlState {
+  running: boolean;
+  paused: boolean;
+  cancelled: boolean;
+}
+
+export const runBatchAsync = (limit?: number) =>
+  req<{ started: boolean; reason?: string }>("/batch/run_async", {
+    method: "POST",
+    body: JSON.stringify({ limit: limit ?? null }),
+  });
+
+export const pauseBatch = () => req<BatchControlState>("/batch/pause", { method: "POST", body: "{}" });
+export const resumeBatch = () => req<BatchControlState>("/batch/resume", { method: "POST", body: "{}" });
+export const cancelBatch = () => req<BatchControlState>("/batch/cancel", { method: "POST", body: "{}" });
+export const clearBatch = () =>
+  req<{ cleared: number } & BatchControlState>("/batch/clear", { method: "POST", body: "{}" });
+export const getBatchControl = () => req<BatchControlState>("/batch/control");
+
 export const getChaosState = () => req<{ active: ChaosEntry[] }>("/chaos/state");
 
 export const setChaos = (b: { server: string; tool: string; mode: string; latency_s?: number }) =>

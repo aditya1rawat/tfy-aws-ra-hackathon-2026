@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import threading
 import uuid
 
 from fastapi import FastAPI
@@ -18,6 +19,7 @@ from lifeline.agent.state import new_state
 from lifeline.agent.tools import InProcessBackend, MCPBackend, ToolGateway
 from lifeline.audit import AuditLog
 from lifeline.config import Settings, get_settings
+from lifeline.batch.control import batch_control
 from lifeline.batch.store import JobStore
 from lifeline.batch.worker import BatchWorker
 from lifeline.bridge.request_store import RequestStore
@@ -154,6 +156,50 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
     @app.post("/batch/run")
     def batch_run(req: RunRequest) -> dict:
         return {"counts": worker.run_all(limit=req.limit)}
+
+    @app.post("/batch/run_async")
+    def batch_run_async(req: RunRequest) -> dict:
+        """Start a batch run on a background thread so it can be paused/killed
+        live (the demo Run button). Returns immediately; poll /batch/status."""
+        if batch_control.running:
+            return {"started": False, "reason": "already running"}
+        batch_control.start()
+
+        def _job():
+            try:
+                worker.run_all(limit=req.limit, control=batch_control)
+            finally:
+                batch_control.finish()
+
+        threading.Thread(target=_job, daemon=True).start()
+        return {"started": True}
+
+    @app.post("/batch/pause")
+    def batch_pause() -> dict:
+        batch_control.pause()
+        return batch_control.snapshot()
+
+    @app.post("/batch/resume")
+    def batch_resume() -> dict:
+        batch_control.resume()
+        return batch_control.snapshot()
+
+    @app.post("/batch/cancel")
+    def batch_cancel() -> dict:
+        """Stop the run after the current in-flight item (no corruption)."""
+        batch_control.cancel()
+        return batch_control.snapshot()
+
+    @app.post("/batch/clear")
+    def batch_clear() -> dict:
+        """Kill switch: stop the run and wipe the queue clean."""
+        batch_control.cancel()
+        removed = store.clear()
+        return {"cleared": removed, **batch_control.snapshot()}
+
+    @app.get("/batch/control")
+    def batch_control_state() -> dict:
+        return batch_control.snapshot()
 
     @app.post("/batch/requeue")
     def batch_requeue(req: RequeueRequest) -> dict:

@@ -35,21 +35,30 @@ export default function XrayPage() {
           onClear={wrap(() => clearChaos())}
         />
       </div>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <section className="lg:col-span-2">
-          <h2 className="mb-2 text-[10px] uppercase tracking-wide text-zinc-500">Live run · {latest?.patient_id ?? "—"}</h2>
-          <NodeGraph run={latest} />
-          <h2 className="mb-2 mt-3 text-[10px] uppercase tracking-wide text-zinc-500">Event stream</h2>
-          <EventLog runs={runs} />
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+        {/* Main column: live run, event stream, then proof + cost side by side, then batch */}
+        <section className="space-y-4 lg:col-span-2">
+          <div>
+            <h2 className="mb-2 text-[10px] uppercase tracking-wide text-zinc-500">Live run · {latest?.patient_id ?? "—"}</h2>
+            <NodeGraph run={latest} />
+          </div>
+          <div>
+            <h2 className="mb-2 text-[10px] uppercase tracking-wide text-zinc-500">Event stream</h2>
+            <EventLog runs={runs} />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <ProofPanels state={system} latest={latest} />
+            <CostPanel tone="dark" />
+          </div>
+          <BatchMonitorPanel tone="dark" />
         </section>
-        <section className="space-y-3">
-          <ProofPanels state={system} latest={latest} />
-        </section>
-      </div>
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2"><BatchMonitorPanel tone="dark" /></div>
-        <div><CostPanel tone="dark" /></div>
-        <div className="lg:col-span-3"><AuditPanel tone="dark" /></div>
+
+        {/* Right rail: audit trail */}
+        <aside className="lg:col-span-1">
+          <div className="lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)]">
+            <AuditPanel tone="dark" />
+          </div>
+        </aside>
       </div>
     </main>
   );
