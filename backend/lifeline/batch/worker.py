@@ -18,6 +18,7 @@ class BatchWorker:
         state = new_state(
             item_id=item["item_id"], patient_id=item["patient_id"],
             request_type=item["request_type"], med_id=item["med_id"],
+            raw_text=item.get("raw_text"),
         )
         # Thread carries the attempt so a requeued (degraded) item runs fresh
         # instead of resuming its completed degraded checkpoint.

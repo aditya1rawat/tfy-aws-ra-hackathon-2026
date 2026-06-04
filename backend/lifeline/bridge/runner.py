@@ -13,13 +13,21 @@ class AgentRunner:
         return self._graph.invoke(state, {"configurable": {"thread_id": thread_id}})
 
     def stream(self, state: dict, *, thread_id: str) -> Iterator[dict]:
-        """Yield one event per completed node: {node, status, detail}."""
+        """Yield one event per completed node: {node, status, detail}.
+
+        Nodes that don't change status carry the last known one forward, so the
+        timeline shows the agent's real state (e.g. in_progress) rather than null.
+        """
         config = {"configurable": {"thread_id": thread_id}}
+        last_status = state.get("status")
         for chunk in self._graph.stream(state, config):
             for node, update in chunk.items():
+                status = update.get("status")
+                if status is not None:
+                    last_status = status
                 audit = update.get("audit") or [{}]
                 yield {
                     "node": node,
-                    "status": update.get("status"),
+                    "status": last_status,
                     "detail": audit[-1].get("detail"),
                 }

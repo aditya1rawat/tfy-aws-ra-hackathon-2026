@@ -24,7 +24,9 @@ def intake(state: ItemState, *, deps: Deps) -> dict:
         except LLMUnavailable as err:
             return {"status": Status.QUEUED, "current_node": "intake",
                     "error": str(err), "audit": [_audit("intake", "llm unavailable → queue")]}
-        model_used = deps.llm.name
+        # Record the concrete model that answered (ResilientLLM.last_model after
+        # fallback), not the wrapper's constant name.
+        model_used = getattr(deps.llm, "last_model", None) or deps.llm.name
     else:
         intent = Intent(patient_id=state["patient_id"],
                         request_type=state["request_type"], med_id=state["med_id"])

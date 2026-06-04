@@ -46,3 +46,12 @@ def test_stream_emits_node_events_in_order():
 def test_stream_final_event_is_done():
     events = list(_runner().stream(_state(), thread_id="t3"))
     assert events[-1]["status"] == Status.DONE
+
+
+def test_stream_carries_status_no_nulls():
+    # Nodes that don't set status carry the last known one — no null in the timeline.
+    events = list(_runner().stream(_state(), thread_id="t4"))
+    assert all(e["status"] is not None for e in events)
+    # mid-pipeline nodes reflect in_progress, not null
+    mid = next(e for e in events if e["node"] == "load_context")
+    assert mid["status"] == Status.IN_PROGRESS
