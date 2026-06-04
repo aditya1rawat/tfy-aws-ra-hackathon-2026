@@ -78,6 +78,26 @@ class ChaosClearRequest(BaseModel):
     tool: str | None = None
 
 
+class PatientRequest(BaseModel):
+    patient_id: str
+    med_id: str
+    request_type: str = "refill"
+    reason: str | None = None
+
+
+class ClinicAction(BaseModel):
+    request_id: str
+    action: str            # approve_alternative | override | reject
+    note: str | None = None
+
+
+class LlmChaos(BaseModel):
+    killed: bool
+
+
+_ACTION_STATUS = {"approve_alternative": "done", "override": "done", "reject": "failed"}
+
+
 def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
               request_store: RequestStore | None = None,
               primary_model: str = "sonnet-sim") -> FastAPI:
@@ -187,6 +207,95 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
     @app.get("/cost")
     def cost() -> dict:
         return {"model_counts": store.model_counts()}
+
+    # --- Product surfaces (patient / clinic / system / x-ray) ---
+    from lifeline.bridge.narrative import humanize
+    from lifeline.bridge.names import med_name, patient_name
+
+    def _run_and_store(patient_id: str, med_id: str, request_type: str) -> str:
+        request_id = uuid.uuid4().hex
+        raw = f"Patient {patient_id} requests {request_type} of {med_id}."
+        state = new_state(item_id=request_id, patient_id=patient_id,
+                          request_type=request_type, med_id=med_id, raw_text=raw)
+        terminal = runner.run_sync(state, thread_id=request_id)
+        request_store.add(request_id, terminal)
+        return request_id
+
+    def _summary(rec: dict) -> dict:
+        narrative = humanize(rec["state"], decision=rec["decision"],
+                             primary_model=app.state.primary_model)
+        return {
+            "request_id": rec["request_id"],
+            "patient_id": rec["patient_id"],
+            "patient_name": patient_name(rec["patient_id"]),
+            "med": med_name(rec["med_id"] or ""),
+            "status": narrative["status"],
+            "narrative": narrative,
+            "created_at": rec["created_at"],
+        }
+
+    @app.post("/patient/request")
+    def patient_request(req: PatientRequest) -> dict:
+        request_id = _run_and_store(req.patient_id, req.med_id, req.request_type)
+        return {"request_id": request_id}
+
+    @app.get("/patient/{patient_id}/requests")
+    def patient_requests(patient_id: str) -> dict:
+        return {"requests": [_summary(r) for r in request_store.list_by_patient(patient_id)]}
+
+    @app.get("/clinic/queue")
+    def clinic_queue() -> dict:
+        return {"items": [_summary(r) for r in request_store.list_all()]}
+
+    @app.post("/clinic/action")
+    def clinic_action(req: ClinicAction):
+        if req.action not in _ACTION_STATUS:
+            return JSONResponse(status_code=400, content={"error": f"bad action {req.action!r}"})
+        try:
+            rec = request_store.get(req.request_id)
+        except KeyError:
+            return JSONResponse(status_code=404, content={"error": "unknown request"})
+        request_store.set_decision(req.request_id, decision=req.action,
+                                   note=req.note, status=_ACTION_STATUS[req.action])
+        return {"ok": True, "new_status": _summary(rec)["status"]}
+
+    @app.get("/system/state")
+    def system_state() -> dict:
+        active = [
+            {"server": s, "tool": t, "mode": cfg.mode, "latency_s": cfg.latency_s}
+            for (s, t), cfg in controller.items()
+        ]
+        killed = is_llm_killed()
+        last = request_store.list_all()
+        active_model = (last[0]["state"].get("model_used") if last else None) or app.state.primary_model
+        return {
+            "degraded": killed or bool(active),
+            "primary_model": app.state.primary_model,
+            "active_model": active_model,
+            "llm_killed": killed,
+            "active_chaos": active,
+        }
+
+    @app.post("/chaos/llm")
+    def chaos_llm(req: LlmChaos) -> dict:
+        set_llm_killed(req.killed)
+        return {"ok": True, "killed": req.killed}
+
+    @app.get("/xray/runs")
+    def xray_runs(limit: int = 20) -> dict:
+        runs = []
+        for rec in request_store.list_all()[:limit]:
+            st = rec["state"]
+            runs.append({
+                "request_id": rec["request_id"],
+                "patient_id": rec["patient_id"],
+                "thread_id": rec["request_id"],
+                "status": st.get("status"),
+                "model_used": st.get("model_used"),
+                "steps": st.get("audit", []),
+                "created_at": rec["created_at"],
+            })
+        return {"runs": runs}
 
     return app
 
