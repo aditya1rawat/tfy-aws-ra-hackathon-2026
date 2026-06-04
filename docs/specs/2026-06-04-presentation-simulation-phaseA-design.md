@@ -20,7 +20,7 @@ One Next.js app, three routes, deployed once. **Vercel host rewrites** expose re
 
 ### 1. Patient App — `/patient` (consumer, phone-framed)
 
-The hero patient (Sarah Chen, `p_001`, on warfarin + lisinopril) using a consumer medication app.
+The hero patient (Maria Gomez, `p_001`, on warfarin + lisinopril) using a consumer medication app.
 
 Screens:
 - **Home** — greeting, current medications list, "Request a medication" CTA.
@@ -33,8 +33,8 @@ Screens:
 A pharmacist (R. Okafor) triaging requests for Dr. Patel's clinic.
 
 Regions:
-- **Queue (left)** — incoming requests with status pills (Escalated / Review / Auto-approved). Sarah's escalated request is selectable.
-- **Detail (center)** — "What the agent did": a human-readable step list (verified patient & coverage → checked against current meds → guardrail blocked unsafe combo → escalated), the interaction flag, the agent's suggested alternative, and the pharmacist action **"Approve alternative & notify Sarah"** plus Override / Reject. A "Full trace ↗" link jumps to `/xray` for the same request.
+- **Queue (left)** — incoming requests with status pills (Escalated / Review / Auto-approved). Maria's escalated request is selectable.
+- **Detail (center)** — "What the agent did": a human-readable step list (verified patient & coverage → checked against current meds → guardrail blocked unsafe combo → escalated), the interaction flag, the agent's suggested alternative, and the pharmacist action **"Approve alternative & notify Maria"** plus Override / Reject. A "Full trace ↗" link jumps to `/xray` for the same request.
 - **System (right)** — model route (Sonnet → Haiku fallback), guardrails active/blocks, and the **overnight batch backdrop** (200 refills, outage window, requeued count, 0 lost).
 - **Top strip** — "AI provider degraded → fallback model active · queue still flowing."
 
@@ -79,19 +79,29 @@ All added to `backend/lifeline/bridge/app.py`, reading existing JobStore / Audit
 - `GET /patient/{patient_id}/requests` — returns `{requests: [{request_id, med, status, narrative}]}` where `narrative` comes from the humanizer.
 - `GET /clinic/queue` — returns `{items: [{request_id, patient_name, med, status, narrative}]}` across pending/escalated/review items.
 - `POST /clinic/action` — body `{request_id, action: "approve_alternative"|"override"|"reject", note?}`. Updates the item status and records a patient-visible notification (reflected in the patient's next status poll). Returns `{ok, new_status}`.
-- `GET /system/state` — returns `{degraded: bool, primary_model, active_model, active_chaos: [...]}` derived from chaos controller + recent audit, for the status strips.
+- `GET /system/state` — returns `{degraded: bool, primary_model, active_model, llm_killed: bool, active_chaos: [...]}` derived from the chaos controller + LLM chaos flag, for the status strips.
+- `POST /chaos/llm` — body `{killed: bool}`. Toggles an app-level LLM chaos flag so the presenter can force the primary model to fail on demand (offline or live), driving the Sonnet→Haiku fallback beat.
 
-Reused unchanged: `/interactive` (SSE node stream for the x-ray node graph), `/audit` (verbose log source), `/chaos/*` (director controls), `/batch/*` (backdrop + queue seed), `/cost`.
+Reused unchanged: `/interactive` (SSE node stream for the x-ray node graph), `/audit` (verbose log source), `/chaos/*` (tool-failure director controls), `/batch/*` (backdrop + queue seed), `/cost`.
+
+### Two resilience levers (both featured)
+
+The demo exposes two independent, on-demand failure stories:
+
+1. **Model fallback** — a new `ChaosLLM` wrapper around the primary LLM client reads a module-level flag (set via `POST /chaos/llm`). When killed, the primary raises `LLMUnavailable`; the existing `ResilientLLM` falls back to the secondary model. To exercise it, the hero patient request is sent through the **free-text intake path** (`raw_text` populated, e.g. "Patient p_001 requests m_aspirin"), so the `intake` node actually calls the LLM. `model_used` records the model that answered.
+2. **Graceful degrade/recover** — the existing tool-failure path: kill a tool via `/chaos/set` → the affected node degrades to `queued` ("taking longer" on the patient surface) → `/batch/requeue` recovers it. No new code; surfaced and narrated.
+
+The hero arc can show either or both. `degraded` in `/system/state` is true while the LLM is killed or any tool chaos is active.
 
 A small helper maps `patient_id` → display name (fixture data already has patients).
 
 ## Data Flow
 
-1. Presenter (or patient screen) calls `POST /patient/request` for Sarah's aspirin request → agent runs → audit events recorded, JobStore item created/updated.
+1. Presenter (or patient screen) calls `POST /patient/request` for Maria's aspirin request → agent runs → audit events recorded, JobStore item created/updated.
 2. `/xray` streams the run live via `/interactive` (node graph) and tails `/audit` (verbose log).
-3. Presenter toggles "Kill provider" via `/chaos/set` mid-run → next LLM call 503s → ResilientLLM falls back to Haiku → recorded in audit → x-ray shows FALL lines, fallback chain panel updates.
+3. Presenter toggles "Kill LLM" via `POST /chaos/llm {killed:true}` before/at submit → the free-text `intake` LLM call raises `LLMUnavailable` → `ResilientLLM` falls back to Haiku → `model_used` = fallback model → x-ray shows FALL lines, fallback chain panel updates. (The separate "kill a tool" lever via `/chaos/set` drives the degrade→queue→requeue beat.)
 4. Guardrail blocks the unsafe combo (existing behavior) → item status becomes escalated → audit records the block.
-5. `/clinic/queue` poll shows Sarah escalated; humanizer renders "what the agent did" + flag + alternative.
+5. `/clinic/queue` poll shows Maria escalated; humanizer renders "what the agent did" + flag + alternative.
 6. Pharmacist clicks Approve alternative → `POST /clinic/action` → item resolved + notification recorded.
 7. Patient app `GET /patient/{id}/requests` poll flips to the Outcome state with the safe alternative.
 8. Status strips on `/patient` and `/clinic` read `/system/state` throughout; they show "degraded → fallback" while chaos is active, then clear on recovery.
@@ -136,13 +146,16 @@ The existing 5 panels move into `/xray` (re-composed) rather than being rewritte
 ## Backend File Structure
 
 ```
+backend/lifeline/agent/
+  llm.py                     # add ChaosLLM wrapper + module-level llm chaos flag
 backend/lifeline/bridge/
-  app.py                     # add the 5 endpoints
+  app.py                     # add the 6 endpoints (incl. /chaos/llm)
   narrative.py               # NEW: humanize() + RequestNarrative (pure)
-  names.py                   # NEW (small): patient_id -> display name from fixtures
+  names.py                   # NEW (small): patient_id/med_id -> display name from fixtures
 backend/tests/
+  test_llm_chaos.py          # NEW: ChaosLLM fails when flag set, recovers when cleared
   test_narrative.py          # NEW: audit-fixture -> expected narrative
-  test_bridge_product_api.py # NEW: patient/clinic/system endpoints
+  test_bridge_product_api.py # NEW: patient/clinic/system/chaos-llm endpoints
 ```
 
 ## Error Handling
