@@ -10,13 +10,17 @@ from pydantic import BaseModel
 
 from lifeline.agent.deps import Deps
 from lifeline.agent.guardrails import InProcessInteractionGuardrail
-from lifeline.agent.llm import FakeLLM, Intent, ResilientLLM, TFGatewayLLM
+from lifeline.agent.llm import (
+    ChaosLLM, FakeLLM, Intent, PatternLLM, ResilientLLM, TFGatewayLLM,
+    is_llm_killed, set_llm_killed,
+)
 from lifeline.agent.state import new_state
 from lifeline.agent.tools import InProcessBackend, MCPBackend, ToolGateway
 from lifeline.audit import AuditLog
 from lifeline.config import Settings, get_settings
 from lifeline.batch.store import JobStore
 from lifeline.batch.worker import BatchWorker
+from lifeline.bridge.request_store import RequestStore
 from lifeline.bridge.runner import AgentRunner
 from lifeline.bridge.scenarios import apply_scenario
 from lifeline.chaos.controller import VALID_MODES, controller
@@ -74,8 +78,13 @@ class ChaosClearRequest(BaseModel):
     tool: str | None = None
 
 
-def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog) -> FastAPI:
+def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
+              request_store: RequestStore | None = None,
+              primary_model: str = "sonnet-sim") -> FastAPI:
     app = FastAPI(title="Lifeline Bridge")
+    request_store = request_store or RequestStore()
+    app.state.request_store = request_store
+    app.state.primary_model = primary_model
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],          # demo: any origin; tighten for prod
@@ -192,12 +201,24 @@ def _select_backend(settings: Settings):
 
 
 def _select_llm(settings: Settings):
-    """Live TF models (primary→fallback) when USE_TF, else a deterministic FakeLLM."""
+    """Primary (chaos-wrappable) → fallback, in both modes.
+
+    Live: ChaosLLM(Sonnet) → Haiku via the TF gateway. Offline: ChaosLLM over
+    deterministic PatternLLMs named to mimic the gateway models, so the
+    model-fallback beat is demoable without a live provider.
+    """
     if settings.use_tf:
         primary = TFGatewayLLM(settings.gateway_base_url, settings.api_key, settings.primary_model)
         fallback = TFGatewayLLM(settings.gateway_base_url, settings.api_key, settings.fallback_model)
-        return ResilientLLM([primary, fallback])
-    return FakeLLM(Intent(patient_id="p_001", request_type="refill", med_id="m_warfarin"))
+    else:
+        primary = PatternLLM(name="sonnet-sim")
+        fallback = PatternLLM(name="haiku-sim")
+    return ResilientLLM([ChaosLLM(primary), fallback])
+
+
+def primary_model_name(settings: Settings) -> str:
+    """The model the primary client reports (for degraded detection)."""
+    return settings.primary_model if settings.use_tf else "sonnet-sim"
 
 
 def _default_app() -> FastAPI:
@@ -210,7 +231,8 @@ def _default_app() -> FastAPI:
     )
     store = JobStore("lifeline_jobs.db")
     checkpointer = SqliteSaver(sqlite3.connect("lifeline_checkpoints.db", check_same_thread=False))
-    return build_app(deps=deps, store=store, checkpointer=checkpointer, audit=audit)
+    return build_app(deps=deps, store=store, checkpointer=checkpointer, audit=audit,
+                     request_store=RequestStore(), primary_model=primary_model_name(settings))
 
 
 app = _default_app()

@@ -1,4 +1,4 @@
-from lifeline.agent.llm import FakeLLM, ResilientLLM
+from lifeline.agent.llm import ChaosLLM, ResilientLLM
 from lifeline.agent.tools import InProcessBackend, MCPBackend
 from lifeline.bridge.app import _select_backend, _select_llm
 from lifeline.config import Settings
@@ -26,8 +26,10 @@ def test_mcp_backend_carries_api_key_for_authenticated_gateway():
     assert backend._api_key == "tfy-token"
 
 
-def test_select_llm_fake_when_not_use_tf():
-    assert isinstance(_select_llm(_settings(use_tf=False)), FakeLLM)
+def test_select_llm_offline_is_resilient_chaos_wrapped():
+    llm = _select_llm(_settings(use_tf=False))
+    assert isinstance(llm, ResilientLLM)
+    assert isinstance(llm._clients[0], ChaosLLM)  # primary is chaos-killable
 
 
 def test_select_llm_resilient_when_use_tf():
