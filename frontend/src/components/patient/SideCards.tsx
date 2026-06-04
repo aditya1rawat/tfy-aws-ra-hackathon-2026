@@ -14,7 +14,7 @@ export function SideCards() {
             <div className="text-xs text-slate-400">10:30 AM · Dr. A. Patel</div>
           </div>
         </div>
-        <button className="mt-4 w-full rounded-lg border border-slate-200 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50">
+        <button className="mt-4 w-full cursor-pointer rounded-lg border border-slate-200 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50">
           Reschedule
         </button>
       </div>

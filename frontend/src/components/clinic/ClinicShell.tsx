@@ -62,7 +62,7 @@ export function ClinicShell({ children }: { children: ReactNode }) {
               />
             </div>
           </div>
-          <button className="relative text-lg" aria-label="Notifications">
+          <button className="relative cursor-pointer text-lg" aria-label="Notifications">
             🔔
             <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-rose-500" />
           </button>

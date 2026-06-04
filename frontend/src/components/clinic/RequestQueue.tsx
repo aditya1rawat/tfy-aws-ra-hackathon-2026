@@ -10,7 +10,7 @@ export function RequestQueue({
         <button
           key={it.request_id}
           onClick={() => onSelect(it.request_id)}
-          className={`w-full rounded-lg border p-2 text-left text-sm ${
+          className={`w-full cursor-pointer rounded-lg border p-2 text-left text-sm transition-colors hover:border-blue-400 ${
             selected === it.request_id ? "border-blue-700 ring-2 ring-blue-200" : "bg-white"
           }`}
         >

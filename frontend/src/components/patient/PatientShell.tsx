@@ -35,7 +35,7 @@ export function PatientShell({ children }: { children: ReactNode }) {
         <div className="m-3 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-600 p-4 text-white">
           <div className="text-sm font-semibold">Need help?</div>
           <div className="mt-1 text-xs text-emerald-50">Message your care team any time.</div>
-          <div className="mt-3 rounded-lg bg-white/15 px-3 py-1.5 text-center text-xs font-medium">Contact support</div>
+          <div className="mt-3 cursor-pointer rounded-lg bg-white/15 px-3 py-1.5 text-center text-xs font-medium hover:bg-white/25">Contact support</div>
         </div>
       </aside>
 
@@ -51,7 +51,7 @@ export function PatientShell({ children }: { children: ReactNode }) {
               />
             </div>
           </div>
-          <button className="relative text-lg" aria-label="Notifications">
+          <button className="relative cursor-pointer text-lg" aria-label="Notifications">
             🔔
             <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-rose-500" />
           </button>

@@ -17,7 +17,7 @@ export function RequestForm({ onSubmit, busy }: { onSubmit: (medId: string, reas
       <select
         value={medId}
         onChange={(e) => setMedId(e.target.value)}
-        className="h-11 w-full rounded-md border px-3 text-sm"
+        className="h-11 w-full cursor-pointer rounded-md border px-3 text-sm"
       >
         {OPTIONS.map((o) => <option key={o.med_id} value={o.med_id}>{o.label}</option>)}
       </select>
