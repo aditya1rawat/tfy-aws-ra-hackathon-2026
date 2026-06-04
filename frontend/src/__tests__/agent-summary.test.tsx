@@ -4,7 +4,7 @@ import { AgentSummary } from "@/components/clinic/AgentSummary";
 import type { RequestSummary } from "@/lib/types";
 
 const item: RequestSummary = {
-  request_id: "r1", patient_id: "p_001", patient_name: "Maria Gomez", med: "Aspirin",
+  request_id: "r1", patient_id: "p_001", patient_name: "Aditya Rawat", med: "Aspirin",
   status: "escalated", created_at: 0,
   narrative: {
     status: "escalated", degraded: false, med: "Aspirin",

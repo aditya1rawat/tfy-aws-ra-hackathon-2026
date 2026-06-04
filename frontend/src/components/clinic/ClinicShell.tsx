@@ -50,8 +50,8 @@ export function ClinicShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-3">
           <div>
-            <div className="text-sm font-semibold">Dr. Patel Family Medicine</div>
-            <div className="text-xs text-slate-400">Pharmacy review desk</div>
+            <div className="text-sm font-semibold">Mercy General Hospital</div>
+            <div className="text-xs text-slate-400">Outpatient Pharmacy</div>
           </div>
           <div className="flex-1">
             <div className="relative mx-auto max-w-md">

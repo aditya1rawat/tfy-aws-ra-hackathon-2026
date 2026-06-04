@@ -2,7 +2,7 @@ from lifeline.bridge.names import med_name, patient_name
 
 
 def test_patient_name_known():
-    assert patient_name("p_001") == "Maria Gomez"
+    assert patient_name("p_001") == "Aditya Rawat"
 
 
 def test_patient_name_unknown_falls_back_to_id():

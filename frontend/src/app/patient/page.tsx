@@ -35,7 +35,7 @@ export default function PatientPage() {
     <PatientShell>
       <div className="mx-auto max-w-6xl space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Good morning, Maria 👋</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Good morning, Aditya 👋</h1>
           <p className="text-sm text-slate-400">{TODAY} · Here&apos;s your health overview</p>
         </div>
 

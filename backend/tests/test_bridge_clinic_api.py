@@ -38,7 +38,7 @@ def test_queue_lists_with_human_names():
     c = _client()
     c.post("/patient/request", json={"patient_id": "p_001", "med_id": "m_aspirin"})
     q = c.get("/clinic/queue").json()["items"]
-    assert q[0]["patient_name"] == "Maria Gomez"
+    assert q[0]["patient_name"] == "Aditya Rawat"
     assert q[0]["med"] == "Aspirin"
     assert q[0]["narrative"]["clinic_flag"] is not None
 

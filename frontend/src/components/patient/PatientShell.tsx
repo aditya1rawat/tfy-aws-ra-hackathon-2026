@@ -56,9 +56,9 @@ export function PatientShell({ children }: { children: ReactNode }) {
             <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-rose-500" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 font-semibold text-emerald-700">MG</div>
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 font-semibold text-emerald-700">AR</div>
             <div className="hidden text-sm leading-tight sm:block">
-              <div className="font-medium">Maria Gomez</div>
+              <div className="font-medium">Aditya Rawat</div>
               <div className="text-xs text-slate-400">Patient #100482</div>
             </div>
           </div>
