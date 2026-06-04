@@ -158,6 +158,18 @@ backend/tests/
   test_bridge_product_api.py # NEW: patient/clinic/system/chaos-llm endpoints
 ```
 
+## Implementation Notes (planning refinements)
+
+Reading the agent code surfaced specifics the plan locks in:
+
+- **RequestStore (in-memory).** Product surfaces need each run's full node-level audit (the `state["audit"]` list of `{node, detail}`), which lives in the checkpointed graph state, not in JobStore. A small in-memory `RequestStore` keyed by `request_id` holds each product request's terminal `ItemState` (audit, status, `model_used`, error) plus the clinic `decision`/`note`. It is the single backing store for the patient, clinic, and x-ray product views. JobStore remains the batch backdrop store.
+- **Synchronous run.** `POST /patient/request` runs the agent via `AgentRunner.run_sync` and stores the terminal state, then returns `{request_id}`. The patient timeline steps come from the captured audit; the "in review → outcome" progression advances when the pharmacist acts (`/clinic/action`), which the patient surface picks up on its next poll.
+- **Offline LLM realism.** To make the model-fallback beat work without live TF, `_select_llm` builds `ResilientLLM([ChaosLLM(primary), fallback])` in **both** modes. Offline, primary/fallback are deterministic `PatternLLM` clients (named to mimic `sonnet`/`haiku`) that regex-extract `patient_id`/`med_id`/`request_type` from the templated `raw_text`, so any patient's free-text request parses correctly. `ChaosLLM` raises `LLMUnavailable` while the LLM chaos flag is set, so `ResilientLLM` falls back and records the fallback model in `model_used`.
+- **Degraded detection (pure).** `humanize(item_state, *, decision, primary_model)` flags `degraded = model_used not in (None, primary_model)` OR any audit detail containing "queue"/"unavailable". The endpoint passes `settings.primary_model` (or the offline primary's name), keeping the humanizer pure.
+- **X-ray data source.** `GET /xray/runs?limit=` returns recent `RequestStore` records `{request_id, patient_id, thread_id, status, model_used, steps:[{node,detail}], created_at}`; the x-ray NodeGraph + verbose EventLog render from these plus `/audit` (tool/MCP calls). This is more demo-robust than scraping the `/interactive` SSE stream for timing.
+
+This makes the product-facing endpoint set: `POST /patient/request`, `GET /patient/{id}/requests`, `GET /clinic/queue`, `POST /clinic/action`, `GET /system/state`, `POST /chaos/llm`, `GET /xray/runs`.
+
 ## Error Handling
 
 - The patient surface never renders an error. A degraded/failed run shows "taking longer" and, on terminal failure, a neutral "we're looking into this" state — recovery is the expected path because of fallback.
