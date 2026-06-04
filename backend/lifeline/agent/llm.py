@@ -1,6 +1,11 @@
+import re
 from typing import Protocol
 
 from pydantic import BaseModel
+
+_PID = re.compile(r"\bp_\d+\b")
+_MID = re.compile(r"\bm_[a-z]+\b")
+_RTYPE = re.compile(r"\b(prior_auth|benefit|refill)\b")
 
 
 class Intent(BaseModel):
@@ -33,6 +38,29 @@ class FakeLLM:
             self._fail_times -= 1
             raise LLMUnavailable(f"{self.name} injected failure")
         return self._intent
+
+
+class PatternLLM:
+    """Deterministic offline intent parser: regex-extract ids/type from free text.
+
+    Stands in for a real model so the free-text intake path works offline for any
+    patient. Raises LLMUnavailable (the uniform failure signal) when it can't.
+    """
+
+    def __init__(self, name: str = "pattern"):
+        self.name = name
+
+    def parse_intent(self, text: str) -> Intent:
+        pid = _PID.search(text or "")
+        mid = _MID.search(text or "")
+        if not pid or not mid:
+            raise LLMUnavailable(f"{self.name}: could not parse intent from {text!r}")
+        rtype = _RTYPE.search(text or "")
+        return Intent(
+            patient_id=pid.group(0),
+            med_id=mid.group(0),
+            request_type=rtype.group(1) if rtype else "refill",
+        )
 
 
 class ResilientLLM:
