@@ -1,20 +1,25 @@
 "use client";
 import { useState } from "react";
 import { mutate } from "swr";
-import { MedsList } from "@/components/patient/MedsList";
+import { MedicationsTable } from "@/components/patient/MedicationsTable";
 import { OutcomeCard } from "@/components/patient/OutcomeCard";
+import { PatientShell } from "@/components/patient/PatientShell";
 import { RequestForm } from "@/components/patient/RequestForm";
+import { SideCards } from "@/components/patient/SideCards";
+import { StatCards } from "@/components/patient/StatCards";
 import { StatusTimeline } from "@/components/patient/StatusTimeline";
 import { useLive } from "@/hooks/useLive";
 import { getPatientRequests, submitPatientRequest } from "@/lib/api";
 
 const PATIENT = "p_001";
 const KEY = `/patient/${PATIENT}/requests`;
+const TODAY = new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 
 export default function PatientPage() {
   const data = useLive(KEY, () => getPatientRequests(PATIENT));
   const [busy, setBusy] = useState(false);
   const requests = data?.requests ?? [];
+  const pending = requests.filter((r) => ["checking", "escalated", "received"].includes(r.narrative.status)).length;
 
   const onSubmit = async (medId: string, reason: string) => {
     setBusy(true);
@@ -27,35 +32,70 @@ export default function PatientPage() {
   };
 
   return (
-    <main className="mx-auto max-w-md p-4">
-      <div className="rounded-t-xl bg-emerald-600 px-4 py-3 font-semibold text-white">Hi Maria 👋</div>
-      <div className="space-y-5 rounded-b-xl border border-t-0 bg-zinc-50 p-4">
-        <section>
-          <h2 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Your medications</h2>
-          <MedsList />
-        </section>
-        <section>
-          <h2 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Request a medication</h2>
-          <RequestForm onSubmit={onSubmit} busy={busy} />
-        </section>
-        <section>
-          <h2 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Your requests</h2>
-          {requests.length === 0 ? (
-            <p className="text-sm text-zinc-500">No requests yet.</p>
-          ) : (
-            requests.map((r) => (
-              <div key={r.request_id} className="mb-3 rounded-lg border bg-white p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="font-semibold">{r.med}</span>
-                  <span className="text-xs uppercase text-zinc-500">{r.narrative.status}</span>
-                </div>
-                <StatusTimeline narrative={r.narrative} />
-                <OutcomeCard narrative={r.narrative} />
+    <PatientShell>
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Good morning, Maria 👋</h1>
+          <p className="text-sm text-slate-400">{TODAY} · Here&apos;s your health overview</p>
+        </div>
+
+        <StatCards pending={pending} />
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            <MedicationsTable />
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="mb-1 font-semibold">Request a medication</h2>
+              <p className="mb-4 text-xs text-slate-400">
+                New prescriptions are automatically checked against your current medications for safety before approval.
+              </p>
+              <RequestForm onSubmit={onSubmit} busy={busy} />
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="font-semibold">Your requests</h2>
+                <span className="text-xs text-slate-400">{requests.length} total</span>
               </div>
-            ))
-          )}
-        </section>
+              {requests.length === 0 ? (
+                <p className="py-6 text-center text-sm text-slate-400">No requests yet. Submit one above to get started.</p>
+              ) : (
+                <div className="space-y-3">
+                  {requests.map((r) => (
+                    <div key={r.request_id} className="rounded-xl border border-slate-100 bg-slate-50/50 p-4">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="font-semibold">{r.med}</span>
+                        <StatusPill status={r.narrative.status} />
+                      </div>
+                      <StatusTimeline narrative={r.narrative} />
+                      <OutcomeCard narrative={r.narrative} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <SideCards />
+        </div>
       </div>
-    </main>
+    </PatientShell>
+  );
+}
+
+const PILL: Record<string, string> = {
+  approved: "bg-emerald-100 text-emerald-700",
+  escalated: "bg-rose-100 text-rose-700",
+  rejected: "bg-rose-100 text-rose-700",
+  checking: "bg-amber-100 text-amber-700",
+  received: "bg-slate-100 text-slate-600",
+};
+
+function StatusPill({ status }: { status: string }) {
+  return (
+    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${PILL[status] ?? "bg-slate-100 text-slate-600"}`}>
+      {status}
+    </span>
   );
 }
