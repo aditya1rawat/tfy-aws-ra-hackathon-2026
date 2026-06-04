@@ -35,7 +35,7 @@ export default function XrayPage() {
           onClear={wrap(() => clearChaos())}
         />
       </div>
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Main column: live run, event stream, then proof + cost side by side, then batch */}
         <section className="space-y-4 lg:col-span-2">
           <div>
@@ -53,11 +53,9 @@ export default function XrayPage() {
           <BatchMonitorPanel tone="dark" />
         </section>
 
-        {/* Right rail: audit trail */}
-        <aside className="lg:col-span-1">
-          <div className="lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)]">
-            <AuditPanel tone="dark" />
-          </div>
+        {/* Right rail: audit trail — stretches to align with the bottom of Batch Monitor */}
+        <aside className="lg:col-span-1 lg:h-full">
+          <AuditPanel tone="dark" />
         </aside>
       </div>
     </main>
