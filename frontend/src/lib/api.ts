@@ -1,4 +1,7 @@
-import type { AuditEvent, BatchItem, ChaosEntry, Counts } from "@/lib/types";
+import type {
+  AuditEvent, BatchItem, ChaosEntry, Counts,
+  RequestSummary, SystemState, XrayRun,
+} from "@/lib/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
@@ -52,5 +55,23 @@ export const applyScenario = (name: string) =>
 export const getAudit = () => req<{ events: AuditEvent[] }>("/audit");
 
 export const getCost = () => req<{ model_counts: Counts }>("/cost");
+
+export const submitPatientRequest = (b: { patient_id: string; med_id: string; request_type?: string; reason?: string }) =>
+  req<{ request_id: string }>("/patient/request", { method: "POST", body: JSON.stringify(b) });
+
+export const getPatientRequests = (patientId: string) =>
+  req<{ requests: RequestSummary[] }>(`/patient/${patientId}/requests`);
+
+export const getClinicQueue = () => req<{ items: RequestSummary[] }>("/clinic/queue");
+
+export const clinicAction = (b: { request_id: string; action: string; note?: string }) =>
+  req<{ ok: boolean; new_status: string }>("/clinic/action", { method: "POST", body: JSON.stringify(b) });
+
+export const getSystemState = () => req<SystemState>("/system/state");
+
+export const setLlmChaos = (killed: boolean) =>
+  req<{ ok: boolean; killed: boolean }>("/chaos/llm", { method: "POST", body: JSON.stringify({ killed }) });
+
+export const getXrayRuns = (limit = 20) => req<{ runs: XrayRun[] }>(`/xray/runs?limit=${limit}`);
 
 export const API_BASE = BASE;

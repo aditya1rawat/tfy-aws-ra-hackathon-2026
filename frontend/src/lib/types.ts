@@ -40,3 +40,47 @@ export interface InteractiveBody {
   med_id: string;
   raw_text?: string;
 }
+
+export interface NarrativeStep {
+  icon: string;
+  title: string;
+  detail?: string;
+}
+
+export interface RequestNarrative {
+  status: string;
+  degraded: boolean;
+  med: string;
+  steps: NarrativeStep[];
+  patient_message: string;
+  clinic_flag: string | null;
+  suggested_alternative: { med: string; reason: string } | null;
+}
+
+export interface RequestSummary {
+  request_id: string;
+  patient_id: string;
+  patient_name: string;
+  med: string;
+  status: string;
+  narrative: RequestNarrative;
+  created_at: number;
+}
+
+export interface SystemState {
+  degraded: boolean;
+  primary_model: string;
+  active_model: string;
+  llm_killed: boolean;
+  active_chaos: ChaosEntry[];
+}
+
+export interface XrayRun {
+  request_id: string;
+  patient_id: string;
+  thread_id: string;
+  status: string | null;
+  model_used: string | null;
+  steps: { node: string; detail: string }[];
+  created_at: number;
+}
