@@ -16,7 +16,7 @@ Judges grade (per `HACKATHON.md`): AI Gateway routing/fallback/observability, MC
 
 ## The Three Surfaces
 
-One Next.js app, three routes, with a persistent top-bar **persona switcher** so the presenter flips between them live on one machine.
+One Next.js app, three routes, deployed once. **Vercel host rewrites** expose realistic separate URLs (`patient.<domain>` → `/patient`, `clinic.<domain>` → `/clinic`, `dashboard.<domain>` → `/xray`) so judges see distinct products, while the code, backend client, and UI primitives stay shared. A persistent top-bar **persona switcher** lets the presenter flip between surfaces live during operation; it is shown in dev/preview and on the bare apex host, and hidden when served from a product subdomain (so a judge on `patient.<domain>` sees only the patient app). See **Deployment** below.
 
 ### 1. Patient App — `/patient` (consumer, phone-framed)
 
@@ -101,12 +101,14 @@ Polling cadence: SWR at the existing dashboard interval for patient/clinic/syste
 ## Frontend File Structure
 
 ```
+frontend/src/
+  middleware.ts              # host -> route rewrite (patient./clinic./dashboard. subdomains)
 frontend/src/app/
-  layout.tsx                 # add <PersonaSwitcher/> top bar
+  layout.tsx                 # add <PersonaSwitcher/> top bar (hidden on product subdomains)
   patient/page.tsx           # patient app shell + screen router
   clinic/page.tsx            # clinic console
   xray/page.tsx              # evolved dashboard (moves today's panels here)
-  page.tsx                   # redirect "/" -> "/xray" (presenter default)
+  page.tsx                   # apex host: landing/switcher; rewritten away on subdomains
 
 frontend/src/components/
   PersonaSwitcher.tsx        # patient | clinic | xray toggle (persists in URL)
@@ -156,6 +158,19 @@ backend/tests/
 - **Product API (integration):** seed JobStore + run agent against `FakeLLM`/in-process backend; assert `/patient/request`, `/patient/{id}/requests`, `/clinic/queue`, `/clinic/action`, `/system/state` shapes and state transitions.
 - **Frontend (component, Vitest):** `StatusTimeline` and `AgentSummary` render expected steps from a narrative fixture; `PersonaSwitcher` routes; `SystemStrip` reflects degraded state. Existing api/sse/useLive tests stay green.
 - Full existing backend (168) + frontend (7) suites must remain green.
+
+## Deployment
+
+Single Vercel project, one build. Three product hostnames resolve to the three routes via `frontend/src/middleware.ts`, which inspects the request `Host` header and rewrites:
+
+- `patient.<domain>`   → `/patient`
+- `clinic.<domain>`    → `/clinic`
+- `dashboard.<domain>` → `/xray`
+- apex `<domain>` (and `*.vercel.app` preview / `localhost`) → no rewrite; serves the landing + persona switcher.
+
+The rewrite is internal (URL stays on the product subdomain). The middleware also sets a header/flag the layout reads to decide whether to render `<PersonaSwitcher/>` (hidden on product subdomains, shown on apex/preview/localhost). All three subdomains share one backend (`NEXT_PUBLIC_API_BASE`); backend CORS is already `allow_origins=["*"]`. Subdomains are added as Vercel domains pointing at the same project — no extra projects or env duplication.
+
+This keeps the realistic separate-URL optic for judges with a single deploy and fully shared code. (If a custom domain is unavailable at demo time, the persona switcher on the apex/preview URL is the fallback presentation path.)
 
 ## Out of Scope (Deferred)
 
