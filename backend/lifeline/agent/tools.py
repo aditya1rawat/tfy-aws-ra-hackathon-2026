@@ -2,7 +2,7 @@ import asyncio
 import time
 from typing import Callable
 
-from lifeline.chaos.controller import ToolFailure, guard
+from lifeline.chaos.controller import RateLimited, ToolFailure, ToolTimeout, guard
 from lifeline.mcp_servers import benefits, chart, formulary, insurer, pharmacy
 
 
@@ -42,15 +42,27 @@ class ToolGateway:
     """
 
     def __init__(self, backend, retries: int = 3, base_delay: float = 0.2,
-                 sleep: Callable[[float], None] = time.sleep, audit=None):
+                 sleep: Callable[[float], None] = time.sleep, audit=None,
+                 rlog=None, run_id_get=None):
         self._backend = backend
         self._retries = retries
         self._base_delay = base_delay
         self._sleep = sleep
         self._audit = audit
+        self._rlog = rlog
+        self._run_id_get = run_id_get or (lambda: None)
+
+    @staticmethod
+    def _mode_of(err: Exception) -> str:
+        if isinstance(err, RateLimited):
+            return "ratelimit"
+        if isinstance(err, ToolTimeout):
+            return "timeout"
+        return "fail"
 
     def call(self, server: str, tool: str, **kwargs):
         last_err: Exception | None = None
+        degraded_once = False
         for attempt in range(self._retries):
             try:
                 # Bridge-side chaos: honor the demo's tool-failure lever even when
@@ -60,13 +72,30 @@ class ToolGateway:
                 result = self._backend.invoke(server, tool, kwargs)
                 if self._audit is not None:
                     self._audit.record(server, tool, True)
+                if degraded_once and self._rlog is not None:
+                    self._rlog.record(self._run_id_get(), layer="tool",
+                                      target=f"{server}.{tool}", attempt=attempt + 1,
+                                      mode=None, backoff_ms=0, outcome="recovered",
+                                      recovered_by="retry")
                 return result
             except ToolFailure as err:
                 last_err = err
+                degraded_once = True
+                backoff_ms = (int(self._base_delay * (2 ** attempt) * 1000)
+                              if attempt < self._retries - 1 else 0)
+                if self._rlog is not None:
+                    self._rlog.record(self._run_id_get(), layer="tool",
+                                      target=f"{server}.{tool}", attempt=attempt + 1,
+                                      mode=self._mode_of(err), backoff_ms=backoff_ms,
+                                      outcome="fail")
                 if attempt < self._retries - 1:
                     self._sleep(self._base_delay * (2 ** attempt))
         if self._audit is not None:
             self._audit.record(server, tool, False, error=str(last_err))
+        if self._rlog is not None:
+            self._rlog.record(self._run_id_get(), layer="tool", target=f"{server}.{tool}",
+                              attempt=self._retries, mode=self._mode_of(last_err),
+                              backoff_ms=0, outcome="degraded")
         raise ToolUnavailable(f"{server}.{tool} failed after {self._retries} attempts: {last_err}")
 
 
