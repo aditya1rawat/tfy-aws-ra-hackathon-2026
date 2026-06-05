@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 import threading
 import uuid
@@ -10,7 +11,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel
 
 from lifeline.agent.deps import Deps
-from lifeline.agent.guardrails import InProcessInteractionGuardrail
+from lifeline.agent.guardrails import HttpInteractionGuardrail, InProcessInteractionGuardrail
 from lifeline.agent.llm import (
     ChaosLLM, FakeLLM, Intent, PatternLLM, ResilientLLM, TFGatewayLLM,
     is_llm_killed, set_llm_killed,
@@ -22,9 +23,11 @@ from lifeline.config import Settings, get_settings
 from lifeline.batch.control import batch_control
 from lifeline.batch.store import JobStore
 from lifeline.batch.worker import BatchWorker
+from lifeline.bridge.hydradb import HydraDBClient
 from lifeline.bridge.request_store import RequestStore
 from lifeline.bridge.runner import AgentRunner
 from lifeline.bridge.scenarios import apply_scenario
+from lifeline.bridge.stores import make_checkpointer, make_job_store, make_request_store
 from lifeline.chaos.controller import VALID_MODES, controller
 from lifeline.data import load_fixture
 
@@ -111,6 +114,11 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
     request_store = request_store or RequestStore()
     app.state.request_store = request_store
     app.state.primary_model = primary_model
+    app.state.hydradb = HydraDBClient(
+        api_key=os.environ.get("HYDRADB_API_KEY", ""),
+        tenant_id=os.environ.get("HYDRADB_TENANT_ID", ""),
+        sub_tenant_id=os.environ.get("HYDRADB_SUB_TENANT_ID", ""),
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],          # demo: any origin; tighten for prod
@@ -348,6 +356,7 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
             "active_model": active_model,
             "llm_killed": killed,
             "active_chaos": active,
+            "hydradb": app.state.hydradb.health(),
         }
 
     @app.post("/chaos/llm")
@@ -376,6 +385,13 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
         return {"runs": runs}
 
     return app
+
+
+def _select_guardrail(settings: Settings):
+    """Live: call the deployed guardrail over HTTP. Offline: in-process engine."""
+    if settings.use_tf:
+        return HttpInteractionGuardrail(settings.guardrail_url)
+    return InProcessInteractionGuardrail()
 
 
 def _select_backend(settings: Settings):
@@ -414,13 +430,14 @@ def _default_app() -> FastAPI:
     deps = Deps(
         llm=_select_llm(settings),
         tools=ToolGateway(_select_backend(settings), audit=audit),
-        guardrail=InProcessInteractionGuardrail(),
+        guardrail=_select_guardrail(settings),
         audit=audit,
     )
-    store = JobStore("lifeline_jobs.db")
-    checkpointer = SqliteSaver(sqlite3.connect("lifeline_checkpoints.db", check_same_thread=False))
+    store = make_job_store(settings)
+    checkpointer = make_checkpointer(settings)
+    request_store = make_request_store(settings)
     return build_app(deps=deps, store=store, checkpointer=checkpointer, audit=audit,
-                     request_store=RequestStore(), primary_model=primary_model_name(settings))
+                     request_store=request_store, primary_model=primary_model_name(settings))
 
 
 app = _default_app()

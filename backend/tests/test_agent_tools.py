@@ -2,6 +2,7 @@ import pytest
 
 from lifeline.agent.tools import InProcessBackend, ToolGateway, ToolUnavailable
 from lifeline.chaos import controller as chaos
+from lifeline.chaos.controller import ToolFailure
 
 
 @pytest.fixture(autouse=True)
@@ -38,18 +39,17 @@ def test_persistent_failure_raises_tool_unavailable_after_retries():
 
 
 def test_transient_failure_then_success(monkeypatch):
-    # Fail once, then clear chaos mid-flight so the retry succeeds.
-    chaos.controller.set("pharmacy", "approve_refill", "fail")
+    # Fail once at the gateway boundary (where ToolGateway guards the outbound
+    # call), then succeed on retry. Patched here because the deployed topology
+    # runs tools remotely, so the bridge-side guard is the failure-injection point.
     calls = {"n": 0}
-    real_guard = chaos.guard
 
     def flaky_guard(server, tool):
         calls["n"] += 1
         if calls["n"] == 1:
-            real_guard(server, tool)  # raises ToolFailure first time
-        # subsequent calls: no chaos
+            raise ToolFailure("transient")  # first attempt fails, retry succeeds
 
-    monkeypatch.setattr("lifeline.mcp_servers.pharmacy.chaos.guard", flaky_guard)
+    monkeypatch.setattr("lifeline.agent.tools.guard", flaky_guard)
     gw = _gateway()
     out = gw.call("pharmacy", "approve_refill", patient_id="p_001", med_id="m_warfarin")
     assert out["status"] == "approved"

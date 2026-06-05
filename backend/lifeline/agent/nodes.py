@@ -67,9 +67,19 @@ def load_context(state: ItemState, *, deps: Deps) -> dict:
 
 
 def interaction(state: ItemState, *, deps: Deps) -> dict:
-    """Deterministic drug-interaction guardrail. Block → escalate to human."""
+    """Deterministic drug-interaction guardrail. Block → escalate to human.
+
+    Fail-safe: if the (possibly remote) guardrail errors, escalate — never allow.
+    """
     existing = state["context"]["chart"].get("current_meds", [])
-    verdict = deps.guardrail.check(existing, state["med_id"])
+    try:
+        verdict = deps.guardrail.check(existing, state["med_id"])
+    except Exception as err:  # remote guardrail down / malformed → fail closed
+        if deps.audit is not None:
+            deps.audit.record("guardrail", "interaction", False, error=str(err))
+        return {"status": Status.ESCALATED, "current_node": "interaction",
+                "error": f"guardrail unavailable: {err}",
+                "audit": [_audit("interaction", "guardrail unavailable → escalate")]}
     blocked = verdict["decision"] == "block"
     if deps.audit is not None:
         deps.audit.record("guardrail", "interaction", not blocked,

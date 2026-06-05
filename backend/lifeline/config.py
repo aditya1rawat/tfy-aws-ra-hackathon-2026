@@ -20,6 +20,7 @@ class Settings:
     guardrail_url: str
     checkpoint_db_path: str
     mcp_gateway_url: str
+    database_url: str = ""
 
 
 def get_settings() -> Settings:
@@ -38,4 +39,5 @@ def get_settings() -> Settings:
         # When set, the bridge routes tool calls through this MCP gateway URL
         # (TF virtual MCP, or the local aggregator) instead of the in-process backend.
         mcp_gateway_url=os.environ.get("MCP_GATEWAY_URL", ""),
+        database_url=os.environ.get("DATABASE_URL", ""),
     )

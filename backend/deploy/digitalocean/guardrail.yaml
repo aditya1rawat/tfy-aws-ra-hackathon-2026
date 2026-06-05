@@ -1,0 +1,18 @@
+# DigitalOcean App Platform spec — lifeline-guardrail
+# Deploy: doctl apps create --spec backend/deploy/digitalocean/guardrail.yaml
+# No env/secrets. Gives a public HTTPS URL → use as GUARDRAIL_URL.
+name: lifeline-guardrail
+region: nyc
+services:
+  - name: guardrail
+    github:
+      repo: aditya1rawat/tfy-aws-ra-hackathon-2026
+      branch: feat/phaseB1-live-tf
+      deploy_on_push: false
+    source_dir: backend
+    dockerfile_path: backend/deploy/Dockerfile.guardrail
+    http_port: 8010
+    instance_count: 1
+    instance_size_slug: basic-xs
+    health_check:
+      http_path: /health
