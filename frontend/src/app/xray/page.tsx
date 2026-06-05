@@ -85,8 +85,8 @@ export default function XrayPage() {
 				</div>
 
 				{/* Right rail: audit trail — whole right side, alongside batch */}
-				<aside className='lg:col-span-1'>
-					<div className='lg:sticky lg:top-4 lg:h-[calc(100dvh-6rem)]'>
+				<aside className='lg:col-span-1 h-full'>
+					<div className='lg:sticky lg:top-4 h-full'>
 						<AuditPanel tone='dark' />
 					</div>
 				</aside>
