@@ -1,6 +1,6 @@
 import type {
   AuditEvent, BatchItem, ChaosEntry, Counts,
-  RequestSummary, SystemState, XrayRun,
+  RequestSummary, ResilienceEvent, SystemState, XrayRun,
 } from "@/lib/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
@@ -95,5 +95,16 @@ export const setLlmChaos = (killed: boolean) =>
   req<{ ok: boolean; killed: boolean }>("/chaos/llm", { method: "POST", body: JSON.stringify({ killed }) });
 
 export const getXrayRuns = (limit = 20) => req<{ runs: XrayRun[] }>(`/xray/runs?limit=${limit}`);
+
+export const getResilience = (runId?: string) =>
+  req<{ run_id: string | null; events: ResilienceEvent[] }>(
+    `/xray/resilience${runId ? `?run_id=${runId}` : ""}`);
+
+export const setLlmMode = (mode: string) =>
+  req<{ ok: boolean; mode: string; killed: boolean }>(
+    "/chaos/llm", { method: "POST", body: JSON.stringify({ mode }) });
+
+export const applyCascade = () =>
+  req<{ applied: unknown[] }>("/chaos/scenario/cascade", { method: "POST" });
 
 export const API_BASE = BASE;

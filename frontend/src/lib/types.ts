@@ -75,6 +75,24 @@ export interface SystemState {
   active_chaos: ChaosEntry[];
 }
 
+export interface ResilienceEvent {
+  run_id: string | null;
+  ts: number;
+  layer: "llm" | "tool";
+  target: string;
+  attempt: number;
+  mode: string | null;
+  backoff_ms: number;
+  outcome: "fail" | "recovered" | "degraded";
+  recovered_by: string | null;
+}
+
+export interface ResilienceSummary {
+  attempts: number;
+  recovered: boolean;
+  degraded: boolean;
+}
+
 export interface XrayRun {
   request_id: string;
   patient_id: string;
@@ -82,5 +100,6 @@ export interface XrayRun {
   status: string | null;
   model_used: string | null;
   steps: { node: string; detail: string }[];
+  resilience?: ResilienceSummary;
   created_at: number;
 }
