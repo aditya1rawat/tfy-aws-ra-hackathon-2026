@@ -25,8 +25,8 @@ Browser → Vercel (frontend)
                 → HydraDB                           (provisioned; memory feature deferred)
 ```
 
-- **Models:** primary `aws-bedrock/global.anthropic.claude-sonnet-4-6` (AWS Bedrock),
-  fallback `anthropic/claude-haiku-4-5` (Anthropic-direct — a cross-provider fallback).
+- **Models:** primary `aws-bedrock/global.anthropic.claude-sonnet-4-6` + fallback
+  `aws-bedrock/global.anthropic.claude-haiku-4-5` — both on AWS Bedrock via the TF gateway.
 - **Health at a glance:** `GET /system/state` → `primary_model`, `active_model`,
   `llm_killed`, active chaos, `hydradb`, `degraded`.
 
@@ -43,10 +43,11 @@ Each beat = a judging axis, a one-line "what to click", and the verified live re
 
 ### Beat 1 — Model fallback (AI Gateway: routing + fallback)
 - **Do:** `/xray` → **Kill LLM**, then submit a request.
-- **Live result:** under kill, intake answered by the **fallback** (`model_used:
-  anthropic/claude-haiku-4-5`), run still completed (`done`). Primary restored after.
-- **Proves:** primary Bedrock model down → gateway/app fallback keeps the agent working,
-  across providers. TF AI-Monitoring shows the route.
+- **Live result:** under kill, intake answered by the **Bedrock fallback** (`model_used:
+  aws-bedrock/global.anthropic.claude-haiku-4-5`), run still completed (`done`). Primary
+  restored after.
+- **Proves:** primary Bedrock model down → gateway/app fallback (sonnet → haiku, both
+  Bedrock) keeps the agent working. TF AI-Monitoring shows the route.
 
 ### Beat 2 — Tool degradation + recovery (Resilience + MCP: tool failures)
 - **Do:** `/xray` → **Kill chart tool**, submit a request → it degrades; clear → recover.
