@@ -1,4 +1,7 @@
-import type { AuditEvent, BatchItem, ChaosEntry, Counts } from "@/lib/types";
+import type {
+  AuditEvent, BatchItem, ChaosEntry, Counts,
+  RequestSummary, SystemState, XrayRun,
+} from "@/lib/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
@@ -26,6 +29,9 @@ export const seedFixture = () =>
 export const seedDemo = () =>
   req<{ seeded: number }>("/batch/seed_demo", { method: "POST" });
 
+export const seedN = (count: number) =>
+  req<{ seeded: number }>("/batch/seed_n", { method: "POST", body: JSON.stringify({ count }) });
+
 export const runBatch = (limit?: number) =>
   req<{ counts: Counts }>("/batch/run", {
     method: "POST",
@@ -37,6 +43,25 @@ export const requeueBatch = (statuses: string[] = ["queued"]) =>
     method: "POST",
     body: JSON.stringify({ statuses }),
   });
+
+export interface BatchControlState {
+  running: boolean;
+  paused: boolean;
+  cancelled: boolean;
+}
+
+export const runBatchAsync = (limit?: number) =>
+  req<{ started: boolean; reason?: string }>("/batch/run_async", {
+    method: "POST",
+    body: JSON.stringify({ limit: limit ?? null }),
+  });
+
+export const pauseBatch = () => req<BatchControlState>("/batch/pause", { method: "POST", body: "{}" });
+export const resumeBatch = () => req<BatchControlState>("/batch/resume", { method: "POST", body: "{}" });
+export const cancelBatch = () => req<BatchControlState>("/batch/cancel", { method: "POST", body: "{}" });
+export const clearBatch = () =>
+  req<{ cleared: number } & BatchControlState>("/batch/clear", { method: "POST", body: "{}" });
+export const getBatchControl = () => req<BatchControlState>("/batch/control");
 
 export const getChaosState = () => req<{ active: ChaosEntry[] }>("/chaos/state");
 
@@ -52,5 +77,23 @@ export const applyScenario = (name: string) =>
 export const getAudit = () => req<{ events: AuditEvent[] }>("/audit");
 
 export const getCost = () => req<{ model_counts: Counts }>("/cost");
+
+export const submitPatientRequest = (b: { patient_id: string; med_id: string; request_type?: string; reason?: string }) =>
+  req<{ request_id: string }>("/patient/request", { method: "POST", body: JSON.stringify(b) });
+
+export const getPatientRequests = (patientId: string) =>
+  req<{ requests: RequestSummary[] }>(`/patient/${patientId}/requests`);
+
+export const getClinicQueue = () => req<{ items: RequestSummary[] }>("/clinic/queue");
+
+export const clinicAction = (b: { request_id: string; action: string; note?: string }) =>
+  req<{ ok: boolean; new_status: string }>("/clinic/action", { method: "POST", body: JSON.stringify(b) });
+
+export const getSystemState = () => req<SystemState>("/system/state");
+
+export const setLlmChaos = (killed: boolean) =>
+  req<{ ok: boolean; killed: boolean }>("/chaos/llm", { method: "POST", body: JSON.stringify({ killed }) });
+
+export const getXrayRuns = (limit = 20) => req<{ runs: XrayRun[] }>(`/xray/runs?limit=${limit}`);
 
 export const API_BASE = BASE;

@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import threading
 import uuid
 
 from fastapi import FastAPI
@@ -10,13 +11,18 @@ from pydantic import BaseModel
 
 from lifeline.agent.deps import Deps
 from lifeline.agent.guardrails import InProcessInteractionGuardrail
-from lifeline.agent.llm import FakeLLM, Intent, ResilientLLM, TFGatewayLLM
+from lifeline.agent.llm import (
+    ChaosLLM, FakeLLM, Intent, PatternLLM, ResilientLLM, TFGatewayLLM,
+    is_llm_killed, set_llm_killed,
+)
 from lifeline.agent.state import new_state
 from lifeline.agent.tools import InProcessBackend, MCPBackend, ToolGateway
 from lifeline.audit import AuditLog
 from lifeline.config import Settings, get_settings
+from lifeline.batch.control import batch_control
 from lifeline.batch.store import JobStore
 from lifeline.batch.worker import BatchWorker
+from lifeline.bridge.request_store import RequestStore
 from lifeline.bridge.runner import AgentRunner
 from lifeline.bridge.scenarios import apply_scenario
 from lifeline.chaos.controller import VALID_MODES, controller
@@ -37,6 +43,10 @@ class SeedRequest(BaseModel):
 
 class RunRequest(BaseModel):
     limit: int | None = None
+
+
+class SeedNRequest(BaseModel):
+    count: int
 
 
 # Free-text care-coordinator requests (valid fixture ids) that go through the
@@ -74,8 +84,33 @@ class ChaosClearRequest(BaseModel):
     tool: str | None = None
 
 
-def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog) -> FastAPI:
+class PatientRequest(BaseModel):
+    patient_id: str
+    med_id: str
+    request_type: str = "refill"
+    reason: str | None = None
+
+
+class ClinicAction(BaseModel):
+    request_id: str
+    action: str            # approve_alternative | override | reject
+    note: str | None = None
+
+
+class LlmChaos(BaseModel):
+    killed: bool
+
+
+_ACTION_STATUS = {"approve_alternative": "done", "override": "done", "reject": "failed"}
+
+
+def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
+              request_store: RequestStore | None = None,
+              primary_model: str = "sonnet-sim") -> FastAPI:
     app = FastAPI(title="Lifeline Bridge")
+    request_store = request_store or RequestStore()
+    app.state.request_store = request_store
+    app.state.primary_model = primary_model
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],          # demo: any origin; tighten for prod
@@ -122,9 +157,72 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog) -> FastAP
         store.seed(_DEMO_FREETEXT)
         return {"seeded": len(_DEMO_FREETEXT)}
 
+    @app.post("/batch/seed_n")
+    def batch_seed_n(req: SeedNRequest) -> dict:
+        """Seed an arbitrary number of jobs (the Run-with-count control).
+
+        Cycles the fixture queue and stamps each item with a unique id so
+        repeated runs never collide on the INSERT OR IGNORE primary key.
+        """
+        count = max(0, req.count)
+        base = load_fixture("batch_queue.json")
+        nonce = uuid.uuid4().hex[:8]
+        items = []
+        for i in range(count):
+            src = dict(base[i % len(base)])
+            src["item_id"] = f"{nonce}_{i:05d}"
+            items.append(src)
+        store.seed(items)
+        return {"seeded": len(items)}
+
     @app.post("/batch/run")
     def batch_run(req: RunRequest) -> dict:
         return {"counts": worker.run_all(limit=req.limit)}
+
+    @app.post("/batch/run_async")
+    def batch_run_async(req: RunRequest) -> dict:
+        """Start a batch run on a background thread so it can be paused/killed
+        live (the demo Run button). Returns immediately; poll /batch/status."""
+        if batch_control.running:
+            return {"started": False, "reason": "already running"}
+        batch_control.start()
+
+        def _job():
+            try:
+                worker.run_all(limit=req.limit, control=batch_control)
+            finally:
+                batch_control.finish()
+
+        threading.Thread(target=_job, daemon=True).start()
+        return {"started": True}
+
+    @app.post("/batch/pause")
+    def batch_pause() -> dict:
+        batch_control.pause()
+        return batch_control.snapshot()
+
+    @app.post("/batch/resume")
+    def batch_resume() -> dict:
+        batch_control.resume()
+        return batch_control.snapshot()
+
+    @app.post("/batch/cancel")
+    def batch_cancel() -> dict:
+        """Stop the run after the current in-flight item (no corruption)."""
+        batch_control.cancel()
+        return batch_control.snapshot()
+
+    @app.post("/batch/clear")
+    def batch_clear() -> dict:
+        """Kill switch: stop the run, wipe the queue, and clear the audit trail."""
+        batch_control.cancel()
+        removed = store.clear()
+        audit.clear()
+        return {"cleared": removed, **batch_control.snapshot()}
+
+    @app.get("/batch/control")
+    def batch_control_state() -> dict:
+        return batch_control.snapshot()
 
     @app.post("/batch/requeue")
     def batch_requeue(req: RequeueRequest) -> dict:
@@ -145,14 +243,19 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog) -> FastAP
         if req.mode not in VALID_MODES:
             return JSONResponse(status_code=400, content={"error": f"bad mode {req.mode!r}"})
         controller.set(req.server, req.tool, req.mode, latency_s=req.latency_s)
+        # Log the injection so the audit trail reflects the action immediately,
+        # not only once a run later hits the tool.
+        audit.record(req.server, req.tool, False, error=f"chaos: {req.mode} injected")
         return {"ok": True}
 
     @app.post("/chaos/clear")
     def chaos_clear(req: ChaosClearRequest) -> dict:
         if req.server and req.tool:
             controller.clear(req.server, req.tool)
+            audit.record(req.server, req.tool, True, error="chaos cleared")
         else:
             controller.clear_all()
+            audit.record("chaos", "all", True, error="chaos cleared")
         return {"ok": True}
 
     @app.get("/chaos/state")
@@ -179,6 +282,99 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog) -> FastAP
     def cost() -> dict:
         return {"model_counts": store.model_counts()}
 
+    # --- Product surfaces (patient / clinic / system / x-ray) ---
+    from lifeline.bridge.narrative import humanize
+    from lifeline.bridge.names import med_name, patient_name
+
+    def _run_and_store(patient_id: str, med_id: str, request_type: str) -> str:
+        request_id = uuid.uuid4().hex
+        raw = f"Patient {patient_id} requests {request_type} of {med_id}."
+        state = new_state(item_id=request_id, patient_id=patient_id,
+                          request_type=request_type, med_id=med_id, raw_text=raw)
+        terminal = runner.run_sync(state, thread_id=request_id)
+        request_store.add(request_id, terminal)
+        return request_id
+
+    def _summary(rec: dict) -> dict:
+        narrative = humanize(rec["state"], decision=rec["decision"],
+                             primary_model=app.state.primary_model)
+        return {
+            "request_id": rec["request_id"],
+            "patient_id": rec["patient_id"],
+            "patient_name": patient_name(rec["patient_id"]),
+            "med": med_name(rec["med_id"] or ""),
+            "status": narrative["status"],
+            "narrative": narrative,
+            "created_at": rec["created_at"],
+        }
+
+    @app.post("/patient/request")
+    def patient_request(req: PatientRequest) -> dict:
+        request_id = _run_and_store(req.patient_id, req.med_id, req.request_type)
+        return {"request_id": request_id}
+
+    @app.get("/patient/{patient_id}/requests")
+    def patient_requests(patient_id: str) -> dict:
+        return {"requests": [_summary(r) for r in request_store.list_by_patient(patient_id)]}
+
+    @app.get("/clinic/queue")
+    def clinic_queue() -> dict:
+        return {"items": [_summary(r) for r in request_store.list_all()]}
+
+    @app.post("/clinic/action")
+    def clinic_action(req: ClinicAction):
+        if req.action not in _ACTION_STATUS:
+            return JSONResponse(status_code=400, content={"error": f"bad action {req.action!r}"})
+        try:
+            rec = request_store.get(req.request_id)
+        except KeyError:
+            return JSONResponse(status_code=404, content={"error": "unknown request"})
+        request_store.set_decision(req.request_id, decision=req.action,
+                                   note=req.note, status=_ACTION_STATUS[req.action])
+        return {"ok": True, "new_status": _summary(rec)["status"]}
+
+    @app.get("/system/state")
+    def system_state() -> dict:
+        active = [
+            {"server": s, "tool": t, "mode": cfg.mode, "latency_s": cfg.latency_s}
+            for (s, t), cfg in controller.items()
+        ]
+        killed = is_llm_killed()
+        last = request_store.list_all()
+        active_model = (last[0]["state"].get("model_used") if last else None) or app.state.primary_model
+        return {
+            "degraded": killed or bool(active),
+            "primary_model": app.state.primary_model,
+            "active_model": active_model,
+            "llm_killed": killed,
+            "active_chaos": active,
+        }
+
+    @app.post("/chaos/llm")
+    def chaos_llm(req: LlmChaos) -> dict:
+        set_llm_killed(req.killed)
+        if req.killed:
+            audit.record("llm", "primary_model", False, error="chaos: LLM provider killed")
+        else:
+            audit.record("llm", "primary_model", True, error="LLM provider restored")
+        return {"ok": True, "killed": req.killed}
+
+    @app.get("/xray/runs")
+    def xray_runs(limit: int = 20) -> dict:
+        runs = []
+        for rec in request_store.list_all()[:limit]:
+            st = rec["state"]
+            runs.append({
+                "request_id": rec["request_id"],
+                "patient_id": rec["patient_id"],
+                "thread_id": rec["request_id"],
+                "status": st.get("status"),
+                "model_used": st.get("model_used"),
+                "steps": st.get("audit", []),
+                "created_at": rec["created_at"],
+            })
+        return {"runs": runs}
+
     return app
 
 
@@ -192,12 +388,24 @@ def _select_backend(settings: Settings):
 
 
 def _select_llm(settings: Settings):
-    """Live TF models (primary→fallback) when USE_TF, else a deterministic FakeLLM."""
+    """Primary (chaos-wrappable) → fallback, in both modes.
+
+    Live: ChaosLLM(Sonnet) → Haiku via the TF gateway. Offline: ChaosLLM over
+    deterministic PatternLLMs named to mimic the gateway models, so the
+    model-fallback beat is demoable without a live provider.
+    """
     if settings.use_tf:
         primary = TFGatewayLLM(settings.gateway_base_url, settings.api_key, settings.primary_model)
         fallback = TFGatewayLLM(settings.gateway_base_url, settings.api_key, settings.fallback_model)
-        return ResilientLLM([primary, fallback])
-    return FakeLLM(Intent(patient_id="p_001", request_type="refill", med_id="m_warfarin"))
+    else:
+        primary = PatternLLM(name="sonnet-sim")
+        fallback = PatternLLM(name="haiku-sim")
+    return ResilientLLM([ChaosLLM(primary), fallback])
+
+
+def primary_model_name(settings: Settings) -> str:
+    """The model the primary client reports (for degraded detection)."""
+    return settings.primary_model if settings.use_tf else "sonnet-sim"
 
 
 def _default_app() -> FastAPI:
@@ -207,10 +415,12 @@ def _default_app() -> FastAPI:
         llm=_select_llm(settings),
         tools=ToolGateway(_select_backend(settings), audit=audit),
         guardrail=InProcessInteractionGuardrail(),
+        audit=audit,
     )
     store = JobStore("lifeline_jobs.db")
     checkpointer = SqliteSaver(sqlite3.connect("lifeline_checkpoints.db", check_same_thread=False))
-    return build_app(deps=deps, store=store, checkpointer=checkpointer, audit=audit)
+    return build_app(deps=deps, store=store, checkpointer=checkpointer, audit=audit,
+                     request_store=RequestStore(), primary_model=primary_model_name(settings))
 
 
 app = _default_app()

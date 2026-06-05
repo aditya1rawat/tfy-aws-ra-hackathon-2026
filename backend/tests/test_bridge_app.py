@@ -101,6 +101,37 @@ def test_chaos_set_rejects_bad_mode(client):
     assert r.status_code == 400
 
 
+def test_chaos_action_recorded_in_audit(client):
+    client.post("/chaos/set", json={"server": "chart", "tool": "get_patient_chart", "mode": "fail"})
+    events = client.get("/audit").json()["events"]
+    assert any(e["server"] == "chart" and not e["ok"] for e in events)
+
+
+def test_batch_clear_wipes_audit_trail(client):
+    client.post("/chaos/set", json={"server": "chart", "tool": "get_patient_chart", "mode": "fail"})
+    assert client.get("/audit").json()["events"]          # has the chaos entry
+    client.post("/batch/clear")
+    assert client.get("/audit").json()["events"] == []    # cleared
+
+
+def test_guardrail_and_llm_events_in_audit():
+    # Deps.audit set → intake (LLM) + interaction (guardrail) record to the trail.
+    audit = AuditLog()
+    deps = Deps(
+        llm=FakeLLM(Intent(patient_id="p_002", request_type="refill", med_id="m_ibuprofen")),
+        tools=ToolGateway(InProcessBackend(), audit=audit),
+        guardrail=InProcessInteractionGuardrail(),
+        audit=audit,
+    )
+    cp = SqliteSaver(sqlite3.connect(":memory:", check_same_thread=False))
+    app = build_app(deps=deps, store=JobStore(":memory:"), checkpointer=cp, audit=audit)
+    c = TestClient(app)
+    c.post("/patient/request", json={"patient_id": "p_002", "med_id": "m_ibuprofen"})
+    events = c.get("/audit").json()["events"]
+    assert any(e["server"] == "llm" for e in events)
+    assert any(e["server"] == "guardrail" for e in events)
+
+
 def test_chaos_scenario_applies(client):
     r = client.post("/chaos/scenario/tool_outage")
     assert r.status_code == 200
@@ -137,6 +168,17 @@ def test_cost_counts_reports_model_usage(client):
 def test_cors_header_present(client):
     r = client.get("/health", headers={"Origin": "http://localhost:3000"})
     assert r.headers.get("access-control-allow-origin") in ("*", "http://localhost:3000")
+
+
+def test_seed_n_seeds_requested_count(client):
+    assert client.post("/batch/seed_n", json={"count": 5}).json()["seeded"] == 5
+    assert client.get("/batch/status").json()["counts"]["pending"] == 5
+
+
+def test_seed_n_unique_across_calls(client):
+    client.post("/batch/seed_n", json={"count": 3})
+    client.post("/batch/seed_n", json={"count": 3})
+    assert client.get("/batch/status").json()["counts"]["pending"] == 6  # no id collisions
 
 
 def test_seed_fixture_loads_200(client):
