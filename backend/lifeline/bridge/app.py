@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 import threading
 import uuid
@@ -22,6 +23,7 @@ from lifeline.config import Settings, get_settings
 from lifeline.batch.control import batch_control
 from lifeline.batch.store import JobStore
 from lifeline.batch.worker import BatchWorker
+from lifeline.bridge.hydradb import HydraDBClient
 from lifeline.bridge.request_store import RequestStore
 from lifeline.bridge.runner import AgentRunner
 from lifeline.bridge.scenarios import apply_scenario
@@ -112,6 +114,10 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
     request_store = request_store or RequestStore()
     app.state.request_store = request_store
     app.state.primary_model = primary_model
+    app.state.hydradb = HydraDBClient(
+        api_key=os.environ.get("HYDRADB_API_KEY", ""),
+        tenant_id=os.environ.get("HYDRADB_TENANT_ID", ""),
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],          # demo: any origin; tighten for prod
@@ -349,6 +355,7 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
             "active_model": active_model,
             "llm_killed": killed,
             "active_chaos": active,
+            "hydradb": app.state.hydradb.health(),
         }
 
     @app.post("/chaos/llm")
