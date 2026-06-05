@@ -10,7 +10,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel
 
 from lifeline.agent.deps import Deps
-from lifeline.agent.guardrails import InProcessInteractionGuardrail
+from lifeline.agent.guardrails import HttpInteractionGuardrail, InProcessInteractionGuardrail
 from lifeline.agent.llm import (
     ChaosLLM, FakeLLM, Intent, PatternLLM, ResilientLLM, TFGatewayLLM,
     is_llm_killed, set_llm_killed,
@@ -378,6 +378,13 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
     return app
 
 
+def _select_guardrail(settings: Settings):
+    """Live: call the deployed guardrail over HTTP. Offline: in-process engine."""
+    if settings.use_tf:
+        return HttpInteractionGuardrail(settings.guardrail_url)
+    return InProcessInteractionGuardrail()
+
+
 def _select_backend(settings: Settings):
     """Route tool calls through the MCP gateway when configured, else in-process."""
     if settings.mcp_gateway_url:
@@ -414,7 +421,7 @@ def _default_app() -> FastAPI:
     deps = Deps(
         llm=_select_llm(settings),
         tools=ToolGateway(_select_backend(settings), audit=audit),
-        guardrail=InProcessInteractionGuardrail(),
+        guardrail=_select_guardrail(settings),
         audit=audit,
     )
     store = JobStore("lifeline_jobs.db")
