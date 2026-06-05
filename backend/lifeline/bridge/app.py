@@ -428,7 +428,8 @@ def _select_backend(settings: Settings):
     if settings.mcp_gateway_url:
         # Pass the TF token so an authenticated gateway accepts the call;
         # harmless against the no-auth local aggregator.
-        return MCPBackend(settings.mcp_gateway_url, api_key=settings.api_key)
+        return MCPBackend(settings.mcp_gateway_url, api_key=settings.api_key,
+                          cutoff_s=settings.call_timeout_s)
     return InProcessBackend()
 
 
