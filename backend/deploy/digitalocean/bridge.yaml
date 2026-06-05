@@ -27,9 +27,9 @@ services:
       - key: TF_GATEWAY_BASE_URL
         value: "https://gateway.truefoundry.ai"
       - key: TF_PRIMARY_MODEL
-        value: "anthropic/claude-sonnet-4-6"
+        value: "aws-bedrock/global.anthropic.claude-sonnet-4-6"
       - key: TF_FALLBACK_MODEL
-        value: "anthropic/claude-haiku-4-5"
+        value: "aws-bedrock/us.meta.llama4-scout-17b-instruct-v1-0"
       - key: GUARDRAIL_URL
         value: "https://lifeline-guardrail-amdnu.ondigitalocean.app"
       # Routed through the TF MCP Gateway (auth: TF_API_KEY bearer): tool calls are
