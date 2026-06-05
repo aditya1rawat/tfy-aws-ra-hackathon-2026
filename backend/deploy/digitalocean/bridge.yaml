@@ -32,11 +32,12 @@ services:
         value: "anthropic/claude-haiku-4-5"
       - key: GUARDRAIL_URL
         value: "https://lifeline-guardrail-amdnu.ondigitalocean.app"
-      # Direct to the DO mcp service now (tools live immediately). Swap to the TF
-      # virtual-MCP URL later for the gateway audit + cancel_auth-disable beat.
-      # NOTE: no trailing slash — `/mcp/` 307-redirects to http and breaks.
+      # Routed through the TF MCP Gateway (auth: TF_API_KEY bearer): tool calls are
+      # audited + scoped at the gateway, and insurer_cancel_auth is disabled there
+      # (the scoped-permission beat). Falls back to the raw DO mcp URL if needed:
+      # https://lifeline-mcp-gkjbn.ondigitalocean.app/mcp
       - key: MCP_GATEWAY_URL
-        value: "https://lifeline-mcp-gkjbn.ondigitalocean.app/mcp"
+        value: "https://gateway.truefoundry.ai/adityarawat/mcp/lifeline-tfy-aws-ra-hackathon/server"
       # --- secrets: set type=SECRET, fill values in the console, do not commit ---
       - key: TF_API_KEY
         scope: RUN_TIME
