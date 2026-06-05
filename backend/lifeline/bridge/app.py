@@ -117,6 +117,7 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
     app.state.hydradb = HydraDBClient(
         api_key=os.environ.get("HYDRADB_API_KEY", ""),
         tenant_id=os.environ.get("HYDRADB_TENANT_ID", ""),
+        sub_tenant_id=os.environ.get("HYDRADB_SUB_TENANT_ID", ""),
     )
     app.add_middleware(
         CORSMiddleware,
