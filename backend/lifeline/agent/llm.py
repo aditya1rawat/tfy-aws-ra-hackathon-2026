@@ -70,28 +70,52 @@ class PatternLLM:
 class ResilientLLM:
     """Try each client in order; retry each up to `retries` times before moving on.
 
-    Implements the app-owned model-fallback layer that complements the TF
-    gateway's own virtual-model fallback.
+    Records per-attempt failures + the recovering client to a ResilienceLog (when
+    provided), so the x-ray can show the model-fallback story.
     """
 
-    def __init__(self, clients: list[LLMClient], retries: int = 2):
+    def __init__(self, clients: list[LLMClient], retries: int = 2,
+                 rlog=None, run_id_get=None):
         if not clients:
             raise ValueError("ResilientLLM needs at least one client")
         self._clients = clients
         self._retries = retries
         self.name = "resilient"
         self.last_model: str | None = None
+        self._rlog = rlog
+        self._run_id_get = run_id_get or (lambda: None)
+
+    def _mode_of(self, err: Exception) -> str:
+        if isinstance(err, LLMRateLimited):
+            return "ratelimit"
+        return "fail"
 
     def parse_intent(self, text: str) -> Intent:
         last_err: Exception | None = None
+        degraded_once = False  # any failure before the answering client?
         for client in self._clients:
-            for _ in range(self._retries):
+            for attempt in range(self._retries):
                 try:
                     out = client.parse_intent(text)
                     self.last_model = client.name
+                    if degraded_once and self._rlog is not None:
+                        self._rlog.record(self._run_id_get(), layer="llm",
+                                          target=client.name, attempt=attempt + 1,
+                                          mode=None, backoff_ms=0, outcome="recovered",
+                                          recovered_by=client.name)
                     return out
                 except LLMUnavailable as err:
                     last_err = err
+                    degraded_once = True
+                    if self._rlog is not None:
+                        self._rlog.record(self._run_id_get(), layer="llm",
+                                          target=client.name, attempt=attempt + 1,
+                                          mode=self._mode_of(err), backoff_ms=0,
+                                          outcome="fail")
+        if self._rlog is not None:
+            self._rlog.record(self._run_id_get(), layer="llm", target="(exhausted)",
+                              attempt=0, mode=self._mode_of(last_err) if last_err else "fail",
+                              backoff_ms=0, outcome="degraded")
         raise LLMUnavailable(f"all LLM clients exhausted: {last_err}")
 
 
