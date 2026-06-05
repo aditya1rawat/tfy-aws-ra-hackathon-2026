@@ -59,18 +59,20 @@ export default function XrayPage() {
 
 					<div className='grid grid-cols-1 items-start gap-4 lg:grid-cols-3'>
 						{/* Live run + event stream */}
-						<section className='space-y-4 lg:col-span-2'>
-							<div>
-								<h2 className='mb-2 text-[10px] uppercase tracking-wide text-zinc-500'>
-									Live run · {latest?.patient_id ?? '—'}
-								</h2>
-								<NodeGraph run={latest} />
-							</div>
-							<div>
-								<h2 className='mb-2 text-[10px] uppercase tracking-wide text-zinc-500'>
-									Event stream
-								</h2>
-								<EventLog runs={runs} />
+						<section className='lg:col-span-2'>
+							<div className='space-y-4 rounded-xl bg-zinc-900 p-4 ring-1 ring-zinc-800'>
+								<div>
+									<h2 className='mb-2 text-[10px] uppercase tracking-wide text-zinc-500'>
+										Live run · {latest?.patient_id ?? '—'}
+									</h2>
+									<NodeGraph run={latest} />
+								</div>
+								<div>
+									<h2 className='mb-2 text-[10px] uppercase tracking-wide text-zinc-500'>
+										Event stream
+									</h2>
+									<EventLog runs={runs} />
+								</div>
 							</div>
 						</section>
 
