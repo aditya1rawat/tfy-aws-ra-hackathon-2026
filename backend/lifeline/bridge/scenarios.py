@@ -6,6 +6,11 @@ SCENARIOS: dict[str, list[tuple]] = {
     "slow_pharmacy": [("pharmacy", "approve_refill", "slow", 3.0)],
     "garbage_insurer": [("insurer", "submit_prior_auth", "garbage", 0.0)],
     "batch_provider_outage": [("chart", "get_patient_chart", "fail", 0.0)],
+    "cascade": [
+        ("chart", "get_patient_chart", "slow", 1.0),
+        ("formulary", "check_coverage", "ratelimit", 0.0),
+        ("insurer", "submit_prior_auth", "timeout", 0.0),
+    ],
 }
 
 
