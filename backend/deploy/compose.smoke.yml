@@ -1,0 +1,15 @@
+# backend/deploy/compose.smoke.yml
+services:
+  guardrail:
+    build: { context: .., dockerfile: deploy/Dockerfile.guardrail }
+    ports: ["8010:8010"]
+  mcp:
+    build: { context: .., dockerfile: deploy/Dockerfile.mcp }
+    ports: ["8002:8000"]
+  bridge:
+    build: { context: .., dockerfile: deploy/Dockerfile.bridge }
+    ports: ["8000:8000"]
+    environment:
+      USE_TF: "false"
+      GUARDRAIL_URL: "http://guardrail:8010"
+    depends_on: [guardrail, mcp]
