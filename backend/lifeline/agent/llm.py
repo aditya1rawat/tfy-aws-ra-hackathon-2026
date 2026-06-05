@@ -18,6 +18,10 @@ class LLMUnavailable(Exception):
     """Raised when an LLM client cannot produce a result."""
 
 
+class LLMRateLimited(LLMUnavailable):
+    """Injected 429-style rate limit on an LLM client."""
+
+
 class LLMClient(Protocol):
     name: str
 
@@ -119,24 +123,37 @@ class TFGatewayLLM:
             raise LLMUnavailable(f"{self.name}: {err}") from err
 
 
-# --- App-level LLM chaos lever (demo: force the primary model to fail) ---
-_llm_chaos = {"killed": False}
+# --- App-level LLM chaos lever (demo: force the primary model to misbehave) ---
+import time as _time
+
+_llm_chaos = {"mode": "none"}  # none | fail | ratelimit | slow
+_LLM_SLOW_S = 3.0
+
+
+def set_llm_mode(mode: str) -> None:
+    """Set the LLM chaos mode (none|fail|ratelimit|slow)."""
+    _llm_chaos["mode"] = mode
+
+
+def get_llm_mode() -> str:
+    return _llm_chaos["mode"]
 
 
 def set_llm_killed(killed: bool) -> None:
-    """Toggle the global LLM chaos flag (used by ChaosLLM)."""
-    _llm_chaos["killed"] = bool(killed)
+    """Back-compat: kill == fail mode."""
+    _llm_chaos["mode"] = "fail" if killed else "none"
 
 
 def is_llm_killed() -> bool:
-    return _llm_chaos["killed"]
+    return _llm_chaos["mode"] == "fail"
 
 
 class ChaosLLM:
-    """Wrap an LLM client; raise LLMUnavailable while the chaos flag is set.
+    """Wrap an LLM client; inject the current LLM chaos mode on parse_intent.
 
-    Lets the presenter kill the primary model on demand so ResilientLLM falls
-    back — the live model-fallback beat, offline or against the gateway.
+    none → passthrough; fail → LLMUnavailable; ratelimit → LLMRateLimited;
+    slow → sleep then passthrough. Lets the presenter make the primary model
+    fail / rate-limit / lag so ResilientLLM falls back.
     """
 
     def __init__(self, inner: LLMClient):
@@ -144,6 +161,11 @@ class ChaosLLM:
         self.name = inner.name
 
     def parse_intent(self, text: str) -> Intent:
-        if is_llm_killed():
+        mode = get_llm_mode()
+        if mode == "fail":
             raise LLMUnavailable(f"{self.name}: killed by chaos")
+        if mode == "ratelimit":
+            raise LLMRateLimited(f"{self.name}: rate limited by chaos")
+        if mode == "slow":
+            _time.sleep(_LLM_SLOW_S)
         return self._inner.parse_intent(text)
