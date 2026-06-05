@@ -1,7 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from lifeline.agent.guardrails import InProcessInteractionGuardrail
 from lifeline.agent.llm import LLMClient
+from lifeline.agent.memory import NullMemoryStore
 from lifeline.agent.tools import InProcessBackend, ToolGateway
 
 
@@ -11,6 +12,8 @@ class Deps:
     tools: ToolGateway
     guardrail: object  # InProcessInteractionGuardrail | HttpInteractionGuardrail
     audit: object | None = None  # AuditLog — when set, nodes log LLM + guardrail events
+    memory: object = field(default_factory=NullMemoryStore)  # MemoryStore — recall/write history
+    rlog: object = None  # ResilienceLog — when set, recall node records memory degrades
 
 
 def decide_action(request_type: str, coverage: dict) -> str:
