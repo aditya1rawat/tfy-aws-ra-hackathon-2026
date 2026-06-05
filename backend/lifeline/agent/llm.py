@@ -25,7 +25,7 @@ class LLMRateLimited(LLMUnavailable):
 class LLMClient(Protocol):
     name: str
 
-    def parse_intent(self, text: str) -> Intent:
+    def parse_intent(self, text: str, *, history: str = "") -> Intent:
         ...
 
 
@@ -37,7 +37,7 @@ class FakeLLM:
         self._fail_times = fail_times
         self.name = name
 
-    def parse_intent(self, text: str) -> Intent:
+    def parse_intent(self, text: str, *, history: str = "") -> Intent:
         if self._fail_times > 0:
             self._fail_times -= 1
             raise LLMUnavailable(f"{self.name} injected failure")
@@ -54,7 +54,7 @@ class PatternLLM:
     def __init__(self, name: str = "pattern"):
         self.name = name
 
-    def parse_intent(self, text: str) -> Intent:
+    def parse_intent(self, text: str, *, history: str = "") -> Intent:
         pid = _PID.search(text or "")
         mid = _MID.search(text or "")
         if not pid or not mid:
@@ -90,13 +90,13 @@ class ResilientLLM:
             return "ratelimit"
         return "fail"
 
-    def parse_intent(self, text: str) -> Intent:
+    def parse_intent(self, text: str, *, history: str = "") -> Intent:
         last_err: Exception | None = None
         degraded_once = False  # any failure before the answering client?
         for client in self._clients:
             for attempt in range(self._retries):
                 try:
-                    out = client.parse_intent(text)
+                    out = client.parse_intent(text, history=history)
                     self.last_model = client.name
                     if degraded_once and self._rlog is not None:
                         self._rlog.record(self._run_id_get(), layer="llm",
@@ -140,9 +140,12 @@ class TFGatewayLLM:
         chat = _build_chat_model(base_url, api_key, model)
         self._structured = chat.with_structured_output(Intent)
 
-    def parse_intent(self, text: str) -> Intent:
+    def parse_intent(self, text: str, *, history: str = "") -> Intent:
+        prompt = _INTENT_PROMPT.format(text=text)
+        if history:
+            prompt = f"Prior visits for this patient: {history}\n\n{prompt}"
         try:
-            return self._structured.invoke(_INTENT_PROMPT.format(text=text))
+            return self._structured.invoke(prompt)
         except Exception as err:  # network/429/provider error → uniform signal for ResilientLLM
             raise LLMUnavailable(f"{self.name}: {err}") from err
 
@@ -184,7 +187,7 @@ class ChaosLLM:
         self._inner = inner
         self.name = inner.name
 
-    def parse_intent(self, text: str) -> Intent:
+    def parse_intent(self, text: str, *, history: str = "") -> Intent:
         mode = get_llm_mode()
         if mode == "fail":
             raise LLMUnavailable(f"{self.name}: killed by chaos")
@@ -192,4 +195,4 @@ class ChaosLLM:
             raise LLMRateLimited(f"{self.name}: rate limited by chaos")
         if mode == "slow":
             _time.sleep(_LLM_SLOW_S)
-        return self._inner.parse_intent(text)
+        return self._inner.parse_intent(text, history=history)
