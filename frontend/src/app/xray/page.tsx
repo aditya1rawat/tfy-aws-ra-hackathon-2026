@@ -52,8 +52,13 @@ export default function XrayPage() {
 					onClear={wrap(() => clearChaos())}
 				/>
 			</div>
+			{/* Batch processing up top — the "at scale" headline */}
+			<div className='mb-4'>
+				<BatchMonitorPanel tone='dark' />
+			</div>
+
 			<div className='grid grid-cols-1 items-start gap-4 lg:grid-cols-3'>
-				{/* Main column: live run, event stream, then proof + cost side by side, then batch */}
+				{/* Main column: live run, event stream, then proof + cost side by side */}
 				<section className='space-y-4 lg:col-span-2'>
 					<div>
 						<h2 className='mb-2 text-[10px] uppercase tracking-wide text-zinc-500'>
@@ -71,7 +76,6 @@ export default function XrayPage() {
 						<ProofPanels state={system} latest={latest} />
 						<CostPanel tone='dark' />
 					</div>
-					<BatchMonitorPanel tone='dark' />
 				</section>
 
 				{/* Right rail: audit trail — bounded to the viewport so it scrolls internally */}
