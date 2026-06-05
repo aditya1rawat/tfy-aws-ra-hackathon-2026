@@ -14,8 +14,10 @@ from lifeline.agent.deps import Deps
 from lifeline.agent.guardrails import HttpInteractionGuardrail, InProcessInteractionGuardrail
 from lifeline.agent.llm import (
     ChaosLLM, FakeLLM, Intent, PatternLLM, ResilientLLM, TFGatewayLLM,
-    is_llm_killed, set_llm_killed,
+    get_llm_mode, is_llm_killed, set_llm_killed, set_llm_mode,
 )
+from lifeline.resilience.context import get_run
+from lifeline.resilience.log import ResilienceLog
 from lifeline.agent.state import new_state
 from lifeline.agent.tools import InProcessBackend, MCPBackend, ToolGateway
 from lifeline.audit import AuditLog
@@ -101,7 +103,8 @@ class ClinicAction(BaseModel):
 
 
 class LlmChaos(BaseModel):
-    killed: bool
+    killed: bool | None = None
+    mode: str | None = None     # none | fail | ratelimit | slow
 
 
 _ACTION_STATUS = {"approve_alternative": "done", "override": "done", "reject": "failed"}
@@ -109,11 +112,14 @@ _ACTION_STATUS = {"approve_alternative": "done", "override": "done", "reject": "
 
 def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
               request_store: RequestStore | None = None,
-              primary_model: str = "sonnet-sim") -> FastAPI:
+              primary_model: str = "sonnet-sim",
+              rlog: ResilienceLog | None = None) -> FastAPI:
     app = FastAPI(title="Lifeline Bridge")
     request_store = request_store or RequestStore()
+    rlog = rlog or ResilienceLog()
     app.state.request_store = request_store
     app.state.primary_model = primary_model
+    app.state.rlog = rlog
     app.state.hydradb = HydraDBClient(
         api_key=os.environ.get("HYDRADB_API_KEY", ""),
         tenant_id=os.environ.get("HYDRADB_TENANT_ID", ""),
@@ -226,6 +232,7 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
         batch_control.cancel()
         removed = store.clear()
         audit.clear()
+        rlog.clear()
         return {"cleared": removed, **batch_control.snapshot()}
 
     @app.get("/batch/control")
@@ -361,12 +368,33 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
 
     @app.post("/chaos/llm")
     def chaos_llm(req: LlmChaos) -> dict:
-        set_llm_killed(req.killed)
-        if req.killed:
-            audit.record("llm", "primary_model", False, error="chaos: LLM provider killed")
-        else:
-            audit.record("llm", "primary_model", True, error="LLM provider restored")
-        return {"ok": True, "killed": req.killed}
+        if req.mode is not None:
+            set_llm_mode(req.mode)
+            ok = req.mode == "none"
+            audit.record("llm", "primary_model", ok,
+                         error=None if ok else f"chaos: LLM {req.mode}")
+        elif req.killed is not None:
+            set_llm_killed(req.killed)
+            if req.killed:
+                audit.record("llm", "primary_model", False, error="chaos: LLM provider killed")
+            else:
+                audit.record("llm", "primary_model", True, error="LLM provider restored")
+        return {"ok": True, "mode": get_llm_mode(), "killed": is_llm_killed()}
+
+    def _resilience_summary(run_id: str) -> dict:
+        ev = rlog.by_run(run_id)
+        return {
+            "attempts": sum(1 for e in ev if e["outcome"] == "fail"),
+            "recovered": any(e["outcome"] == "recovered" for e in ev),
+            "degraded": any(e["outcome"] == "degraded" for e in ev),
+        }
+
+    @app.get("/xray/resilience")
+    def xray_resilience(run_id: str | None = None) -> dict:
+        if run_id is None:
+            runs = request_store.list_all()
+            run_id = runs[0]["request_id"] if runs else None
+        return {"run_id": run_id, "events": rlog.by_run(run_id) if run_id else []}
 
     @app.get("/xray/runs")
     def xray_runs(limit: int = 20) -> dict:
@@ -380,6 +408,7 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
                 "status": st.get("status"),
                 "model_used": st.get("model_used"),
                 "steps": st.get("audit", []),
+                "resilience": _resilience_summary(rec["request_id"]),
                 "created_at": rec["created_at"],
             })
         return {"runs": runs}
@@ -403,7 +432,7 @@ def _select_backend(settings: Settings):
     return InProcessBackend()
 
 
-def _select_llm(settings: Settings):
+def _select_llm(settings: Settings, rlog: ResilienceLog | None = None):
     """Primary (chaos-wrappable) → fallback, in both modes.
 
     Live: ChaosLLM(Sonnet) → Haiku via the TF gateway. Offline: ChaosLLM over
@@ -416,7 +445,7 @@ def _select_llm(settings: Settings):
     else:
         primary = PatternLLM(name="sonnet-sim")
         fallback = PatternLLM(name="haiku-sim")
-    return ResilientLLM([ChaosLLM(primary), fallback])
+    return ResilientLLM([ChaosLLM(primary), fallback], rlog=rlog, run_id_get=get_run)
 
 
 def primary_model_name(settings: Settings) -> str:
@@ -427,9 +456,10 @@ def primary_model_name(settings: Settings) -> str:
 def _default_app() -> FastAPI:
     settings = get_settings()
     audit = AuditLog()
+    rlog = ResilienceLog()
     deps = Deps(
-        llm=_select_llm(settings),
-        tools=ToolGateway(_select_backend(settings), audit=audit),
+        llm=_select_llm(settings, rlog=rlog),
+        tools=ToolGateway(_select_backend(settings), audit=audit, rlog=rlog, run_id_get=get_run),
         guardrail=_select_guardrail(settings),
         audit=audit,
     )
@@ -437,7 +467,8 @@ def _default_app() -> FastAPI:
     checkpointer = make_checkpointer(settings)
     request_store = make_request_store(settings)
     return build_app(deps=deps, store=store, checkpointer=checkpointer, audit=audit,
-                     request_store=request_store, primary_model=primary_model_name(settings))
+                     request_store=request_store, primary_model=primary_model_name(settings),
+                     rlog=rlog)
 
 
 app = _default_app()

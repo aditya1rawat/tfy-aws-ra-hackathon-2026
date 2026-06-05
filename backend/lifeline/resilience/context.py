@@ -25,4 +25,9 @@ def run_scope(run_id: str | None):
     try:
         yield
     finally:
-        _current_run.reset(token)
+        try:
+            _current_run.reset(token)
+        except ValueError:
+            # Streaming responses advance the generator in a different Context, so
+            # the token can't be reset there; clear the value instead.
+            _current_run.set(None)
