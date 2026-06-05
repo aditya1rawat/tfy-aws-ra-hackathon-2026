@@ -2,7 +2,7 @@ import asyncio
 import time
 from typing import Callable
 
-from lifeline.chaos.controller import ToolFailure
+from lifeline.chaos.controller import ToolFailure, guard
 from lifeline.mcp_servers import benefits, chart, formulary, insurer, pharmacy
 
 
@@ -53,6 +53,10 @@ class ToolGateway:
         last_err: Exception | None = None
         for attempt in range(self._retries):
             try:
+                # Bridge-side chaos: honor the demo's tool-failure lever even when
+                # tools execute remotely (MCP gateway), where the backend itself
+                # can't be toggled. No-op unless chaos is set for this (server, tool).
+                guard(server, tool)
                 result = self._backend.invoke(server, tool, kwargs)
                 if self._audit is not None:
                     self._audit.record(server, tool, True)
