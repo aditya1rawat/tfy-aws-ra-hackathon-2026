@@ -28,8 +28,12 @@ services:
         value: "https://gateway.truefoundry.ai"
       - key: TF_PRIMARY_MODEL
         value: "aws-bedrock/global.anthropic.claude-sonnet-4-6"
+      # Cross-provider fallback: Bedrock primary → Anthropic-direct haiku. Bedrock
+      # haiku needs a separate model-access grant (403 until enabled); llama4-scout
+      # can't do structured output. Anthropic-direct haiku works + shows the gateway
+      # routing across providers.
       - key: TF_FALLBACK_MODEL
-        value: "aws-bedrock/us.meta.llama4-scout-17b-instruct-v1-0"
+        value: "anthropic/claude-haiku-4-5"
       - key: GUARDRAIL_URL
         value: "https://lifeline-guardrail-amdnu.ondigitalocean.app"
       # Routed through the TF MCP Gateway (auth: TF_API_KEY bearer): tool calls are
