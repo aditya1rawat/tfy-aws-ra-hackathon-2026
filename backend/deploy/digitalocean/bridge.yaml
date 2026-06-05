@@ -12,7 +12,7 @@ services:
   - name: bridge
     github:
       repo: aditya1rawat/tfy-aws-ra-hackathon-2026
-      branch: feat/phaseB1-live-tf
+      branch: main
       deploy_on_push: false
     source_dir: backend
     dockerfile_path: backend/deploy/Dockerfile.bridge
