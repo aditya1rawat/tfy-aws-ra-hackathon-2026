@@ -25,6 +25,7 @@ from lifeline.batch.worker import BatchWorker
 from lifeline.bridge.request_store import RequestStore
 from lifeline.bridge.runner import AgentRunner
 from lifeline.bridge.scenarios import apply_scenario
+from lifeline.bridge.stores import make_checkpointer, make_job_store, make_request_store
 from lifeline.chaos.controller import VALID_MODES, controller
 from lifeline.data import load_fixture
 
@@ -424,10 +425,11 @@ def _default_app() -> FastAPI:
         guardrail=_select_guardrail(settings),
         audit=audit,
     )
-    store = JobStore("lifeline_jobs.db")
-    checkpointer = SqliteSaver(sqlite3.connect("lifeline_checkpoints.db", check_same_thread=False))
+    store = make_job_store(settings)
+    checkpointer = make_checkpointer(settings)
+    request_store = make_request_store(settings)
     return build_app(deps=deps, store=store, checkpointer=checkpointer, audit=audit,
-                     request_store=RequestStore(), primary_model=primary_model_name(settings))
+                     request_store=request_store, primary_model=primary_model_name(settings))
 
 
 app = _default_app()
