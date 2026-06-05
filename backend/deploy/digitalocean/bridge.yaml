@@ -31,7 +31,7 @@ services:
       - key: TF_FALLBACK_MODEL
         value: "anthropic/claude-haiku-4-5"
       - key: GUARDRAIL_URL
-        value: "<lifeline-guardrail public URL>"
+        value: "https://lifeline-guardrail-amdnu.ondigitalocean.app"
       # Set AFTER the TF virtual MCP exists (leave empty for in-process tools first):
       - key: MCP_GATEWAY_URL
         value: ""

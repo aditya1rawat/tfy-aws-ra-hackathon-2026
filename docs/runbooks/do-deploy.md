@@ -79,8 +79,10 @@ doctl apps create-deployment <bridge-app-id>   # force a fresh deploy mid-run �
 
 | Key | Value |
 |---|---|
-| GUARDRAIL_URL | |
-| MCP URL (raw) | |
+| GUARDRAIL_URL | https://lifeline-guardrail-amdnu.ondigitalocean.app |
+| MCP URL (raw) | https://lifeline-mcp-gkjbn.ondigitalocean.app/mcp  (NO trailing slash — `/mcp/` 307→http breaks) |
+| guardrail app id | a7fca2ff-25ce-4975-8c76-bd9f01298a9e |
+| mcp app id | 2f543715-e346-42d9-82c8-378e5565774f |
 | MCP virtual-MCP URL (TF) | |
 | BRIDGE_URL | |
 | bridge app id | |
