@@ -1,7 +1,7 @@
 import time
 from dataclasses import dataclass
 
-VALID_MODES = {"none", "fail", "slow", "garbage"}
+VALID_MODES = {"none", "fail", "slow", "garbage", "ratelimit", "timeout"}
 
 
 @dataclass
@@ -12,6 +12,14 @@ class ChaosConfig:
 
 class ToolFailure(Exception):
     """Raised by guard() when a tool is in injected 'fail' mode."""
+
+
+class RateLimited(ToolFailure):
+    """Injected 429-style rate limit (a transient ToolFailure with a precise mode)."""
+
+
+class ToolTimeout(ToolFailure):
+    """Injected timeout (a transient ToolFailure with a precise mode)."""
 
 
 class ChaosController:
@@ -42,11 +50,15 @@ controller = ChaosController()
 
 
 def guard(server: str, tool: str) -> None:
-    """Apply slow/fail chaos for a tool. Call at the top of every tool function."""
+    """Apply chaos for a tool. Call at the top of every tool function / gateway call."""
     cfg = controller.get(server, tool)
     if cfg.mode == "slow":
         time.sleep(cfg.latency_s)
-    if cfg.mode == "fail":
+    elif cfg.mode == "ratelimit":
+        raise RateLimited(f"{server}.{tool} rate limited")
+    elif cfg.mode == "timeout":
+        raise ToolTimeout(f"{server}.{tool} timed out")
+    elif cfg.mode == "fail":
         raise ToolFailure(f"{server}.{tool} injected failure")
 
 
