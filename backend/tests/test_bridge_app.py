@@ -114,6 +114,24 @@ def test_batch_clear_wipes_audit_trail(client):
     assert client.get("/audit").json()["events"] == []    # cleared
 
 
+def test_guardrail_and_llm_events_in_audit():
+    # Deps.audit set → intake (LLM) + interaction (guardrail) record to the trail.
+    audit = AuditLog()
+    deps = Deps(
+        llm=FakeLLM(Intent(patient_id="p_002", request_type="refill", med_id="m_ibuprofen")),
+        tools=ToolGateway(InProcessBackend(), audit=audit),
+        guardrail=InProcessInteractionGuardrail(),
+        audit=audit,
+    )
+    cp = SqliteSaver(sqlite3.connect(":memory:", check_same_thread=False))
+    app = build_app(deps=deps, store=JobStore(":memory:"), checkpointer=cp, audit=audit)
+    c = TestClient(app)
+    c.post("/patient/request", json={"patient_id": "p_002", "med_id": "m_ibuprofen"})
+    events = c.get("/audit").json()["events"]
+    assert any(e["server"] == "llm" for e in events)
+    assert any(e["server"] == "guardrail" for e in events)
+
+
 def test_chaos_scenario_applies(client):
     r = client.post("/chaos/scenario/tool_outage")
     assert r.status_code == 200

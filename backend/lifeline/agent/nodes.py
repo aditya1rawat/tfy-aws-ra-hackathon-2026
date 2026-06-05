@@ -22,11 +22,15 @@ def intake(state: ItemState, *, deps: Deps) -> dict:
         try:
             intent = deps.llm.parse_intent(state["raw_text"])
         except LLMUnavailable as err:
+            if deps.audit is not None:
+                deps.audit.record("llm", deps.llm.name, False, error=str(err))
             return {"status": Status.QUEUED, "current_node": "intake",
                     "error": str(err), "audit": [_audit("intake", "llm unavailable → queue")]}
         # Record the concrete model that answered (ResilientLLM.last_model after
         # fallback), not the wrapper's constant name.
         model_used = getattr(deps.llm, "last_model", None) or deps.llm.name
+        if deps.audit is not None:
+            deps.audit.record("llm", model_used, True)
     else:
         intent = Intent(patient_id=state["patient_id"],
                         request_type=state["request_type"], med_id=state["med_id"])
@@ -66,7 +70,11 @@ def interaction(state: ItemState, *, deps: Deps) -> dict:
     """Deterministic drug-interaction guardrail. Block → escalate to human."""
     existing = state["context"]["chart"].get("current_meds", [])
     verdict = deps.guardrail.check(existing, state["med_id"])
-    if verdict["decision"] == "block":
+    blocked = verdict["decision"] == "block"
+    if deps.audit is not None:
+        deps.audit.record("guardrail", "interaction", not blocked,
+                          error=verdict["reason"] if blocked else None)
+    if blocked:
         return {"status": Status.ESCALATED, "current_node": "interaction",
                 "error": verdict["reason"],
                 "audit": [_audit("interaction", f"BLOCK: {verdict['reason']}")]}

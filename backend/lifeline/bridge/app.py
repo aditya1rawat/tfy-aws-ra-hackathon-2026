@@ -393,6 +393,7 @@ def _default_app() -> FastAPI:
         llm=_select_llm(settings),
         tools=ToolGateway(_select_backend(settings), audit=audit),
         guardrail=InProcessInteractionGuardrail(),
+        audit=audit,
     )
     store = JobStore("lifeline_jobs.db")
     checkpointer = SqliteSaver(sqlite3.connect("lifeline_checkpoints.db", check_same_thread=False))

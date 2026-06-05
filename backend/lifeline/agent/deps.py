@@ -10,6 +10,7 @@ class Deps:
     llm: LLMClient
     tools: ToolGateway
     guardrail: object  # InProcessInteractionGuardrail | HttpInteractionGuardrail
+    audit: object | None = None  # AuditLog — when set, nodes log LLM + guardrail events
 
 
 def decide_action(request_type: str, coverage: dict) -> str:
