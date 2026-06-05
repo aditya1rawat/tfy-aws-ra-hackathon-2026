@@ -84,5 +84,6 @@ doctl apps create-deployment <bridge-app-id>   # force a fresh deploy mid-run â†
 | guardrail app id | a7fca2ff-25ce-4975-8c76-bd9f01298a9e |
 | mcp app id | 2f543715-e346-42d9-82c8-378e5565774f |
 | MCP virtual-MCP URL (TF) | |
-| BRIDGE_URL | |
-| bridge app id | |
+| BRIDGE_URL | https://lifeline-bridge-oi9cd.ondigitalocean.app |
+| bridge app id | a7bb0e87-5ba0-4fdb-af1f-c5f8ec1e76ea |
+| Frontend (Vercel) | https://lifeline-dusky-zeta.vercel.app  (project: lifeline; NEXT_PUBLIC_API_BASEâ†’bridge) |
