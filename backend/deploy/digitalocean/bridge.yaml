@@ -27,9 +27,9 @@ services:
       - key: TF_GATEWAY_BASE_URL
         value: "https://gateway.truefoundry.ai"
       - key: TF_PRIMARY_MODEL
-        value: "<your primary virtual-model id>"
+        value: "anthropic/claude-sonnet-4-6"
       - key: TF_FALLBACK_MODEL
-        value: "<your fallback virtual-model id>"
+        value: "anthropic/claude-haiku-4-5"
       - key: GUARDRAIL_URL
         value: "<lifeline-guardrail public URL>"
       # Set AFTER the TF virtual MCP exists (leave empty for in-process tools first):
