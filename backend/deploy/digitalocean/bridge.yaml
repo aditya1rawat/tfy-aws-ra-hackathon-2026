@@ -32,9 +32,11 @@ services:
         value: "anthropic/claude-haiku-4-5"
       - key: GUARDRAIL_URL
         value: "https://lifeline-guardrail-amdnu.ondigitalocean.app"
-      # Set AFTER the TF virtual MCP exists (leave empty for in-process tools first):
+      # Direct to the DO mcp service now (tools live immediately). Swap to the TF
+      # virtual-MCP URL later for the gateway audit + cancel_auth-disable beat.
+      # NOTE: no trailing slash — `/mcp/` 307-redirects to http and breaks.
       - key: MCP_GATEWAY_URL
-        value: ""
+        value: "https://lifeline-mcp-gkjbn.ondigitalocean.app/mcp"
       # --- secrets: set type=SECRET, fill values in the console, do not commit ---
       - key: TF_API_KEY
         scope: RUN_TIME
