@@ -4,110 +4,132 @@ import { mutate } from "swr";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Panel } from "@/components/Panel";
-import { StatusBadge } from "@/components/StatusBadge";
 import { useLive } from "@/hooks/useLive";
 import {
   cancelBatch, clearBatch, getBatchControl, getBatchStatus,
   pauseBatch, requeueBatch, resumeBatch, runBatchAsync, seedDemo, seedFixture,
 } from "@/lib/api";
 
-const ORDER = ["pending", "in_progress", "done", "queued", "escalated", "failed"];
 const STATUS_KEY = "/batch/status";
 const CONTROL_KEY = "/batch/control";
+
+// Display order + colors for each lifecycle state.
+const STATES: { key: string; label: string; dot: string; seg: string }[] = [
+  { key: "pending", label: "Pending", dot: "bg-zinc-400", seg: "bg-zinc-500" },
+  { key: "in_progress", label: "In progress", dot: "bg-blue-400", seg: "bg-blue-500" },
+  { key: "done", label: "Done", dot: "bg-emerald-400", seg: "bg-emerald-500" },
+  { key: "queued", label: "Queued (degraded)", dot: "bg-amber-400", seg: "bg-amber-500" },
+  { key: "escalated", label: "Escalated", dot: "bg-red-400", seg: "bg-red-500" },
+  { key: "failed", label: "Failed", dot: "bg-red-300", seg: "bg-red-700" },
+];
 
 export function BatchMonitorPanel({ tone = "light" }: { tone?: "light" | "dark" }) {
   const status = useLive(STATUS_KEY, getBatchStatus, 800);
   const control = useLive(CONTROL_KEY, getBatchControl, 800);
   const [limit, setLimit] = useState("");
   const [busy, setBusy] = useState(false);
+
   const counts = status?.counts ?? {};
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const processed = (counts.done ?? 0) + (counts.escalated ?? 0) + (counts.failed ?? 0);
+  const pct = total ? Math.round((processed / total) * 100) : 0;
+
   const dark = tone === "dark";
-  const muted = dark ? "text-zinc-400" : "text-muted-foreground";
-  const track = dark ? "bg-zinc-700" : "bg-zinc-200";
-  const fill = dark ? "bg-emerald-400" : "bg-zinc-700";
+  const muted = dark ? "text-zinc-400" : "text-zinc-500";
+  const tile = dark ? "bg-zinc-800/50" : "bg-zinc-50";
+  const track = dark ? "bg-zinc-800" : "bg-zinc-200";
+  const big = dark ? "text-zinc-100" : "text-zinc-900";
 
   const running = control?.running ?? false;
   const paused = control?.paused ?? false;
 
-  const refresh = async () => {
-    await mutate(STATUS_KEY);
-    await mutate(CONTROL_KEY);
-  };
-  const run = (fn: () => Promise<unknown>) => async () => {
+  const refresh = async () => { await mutate(STATUS_KEY); await mutate(CONTROL_KEY); };
+  const act = (fn: () => Promise<unknown>) => async () => {
     setBusy(true);
     try { await fn(); await refresh(); } finally { setBusy(false); }
   };
-
-  const onSeed = run(seedFixture);
-  const onSeedDemo = run(seedDemo);
-  const onRun = run(() => runBatchAsync(limit ? Number(limit) : undefined));
-  const onPause = run(pauseBatch);
-  const onResume = run(resumeBatch);
-  const onCancel = run(cancelBatch);
-  const onClear = run(clearBatch);
-  const onRequeue = run(requeueBatch);
 
   const hasQueued = (counts.queued ?? 0) > 0;
 
   return (
     <Panel
-      title="Batch Monitor"
+      title="Batch Processing"
       tone={tone}
       action={
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            value={limit}
-            onChange={(e) => setLimit(e.target.value.replace(/\D/g, ""))}
-            placeholder="limit"
-            className={`h-9 w-20 ${dark ? "border-zinc-700 bg-zinc-800 text-zinc-100 placeholder:text-zinc-500" : ""}`}
-          />
-          <Button className="h-9 px-3" variant="secondary" disabled={busy || running} onClick={onSeed}>Seed 200</Button>
-          <Button className="h-9 px-3" variant="secondary" disabled={busy || running} onClick={onSeedDemo}>Seed demo</Button>
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+          running
+            ? (paused ? "bg-amber-500/20 text-amber-500" : "bg-emerald-500/20 text-emerald-500")
+            : `${tile} ${muted}`
+        }`}>
+          {running ? (paused ? "paused" : "running") : "idle"}
+        </span>
+      }
+    >
+      {/* Headline progress */}
+      <div className="mb-2 flex items-end justify-between">
+        <div>
+          <span className={`text-3xl font-bold tabular-nums ${big}`}>{processed}</span>
+          <span className={`text-lg ${muted}`}> / {total}</span>
+          <span className={`ml-2 text-xs ${muted}`}>processed</span>
+        </div>
+        <div className={`text-2xl font-bold tabular-nums ${big}`}>{pct}%</div>
+      </div>
 
-          {running ? (
-            <>
-              {paused ? (
-                <Button className="h-9 px-4 bg-emerald-600 text-white hover:bg-emerald-500" disabled={busy} onClick={onResume}>Resume</Button>
-              ) : (
-                <Button className="h-9 px-4 bg-amber-500 text-white hover:bg-amber-400" disabled={busy} onClick={onPause}>Pause</Button>
-              )}
-              <Button className="h-9 px-4 bg-orange-600 text-white hover:bg-orange-500" disabled={busy} onClick={onCancel}>Stop</Button>
-            </>
-          ) : (
-            <Button className="h-9 px-4" disabled={busy} onClick={onRun}>Run</Button>
-          )}
+      {/* Segmented progress bar */}
+      <div className={`flex h-2.5 w-full overflow-hidden rounded-full ${track}`}>
+        {STATES.map((s) =>
+          counts[s.key] ? (
+            <div key={s.key} className={s.seg} style={{ width: `${(counts[s.key] / total) * 100}%` }} title={`${s.label}: ${counts[s.key]}`} />
+          ) : null,
+        )}
+      </div>
 
-          {hasQueued ? (
-            <Button className="h-9 px-3" variant="outline" disabled={busy} onClick={onRequeue}>Requeue</Button>
-          ) : null}
-          <Button className="h-9 px-4 bg-red-600 text-white hover:bg-red-500" disabled={busy || total === 0} onClick={onClear}>
+      {/* Status tiles */}
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {STATES.map((s) => (
+          <div key={s.key} className={`rounded-lg ${tile} px-2.5 py-2`}>
+            <div className={`flex items-center gap-1.5 text-[11px] ${muted}`}>
+              <span className={`h-2 w-2 rounded-full ${s.dot}`} />
+              {s.label}
+            </div>
+            <div className={`mt-0.5 text-lg font-semibold tabular-nums ${big}`}>{counts[s.key] ?? 0}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Controls */}
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Input
+          value={limit}
+          onChange={(e) => setLimit(e.target.value.replace(/\D/g, ""))}
+          placeholder="limit"
+          className={`h-9 w-20 ${dark ? "border-zinc-700 bg-zinc-800 text-zinc-100 placeholder:text-zinc-500" : ""}`}
+        />
+        <Button className="h-9 px-3" variant="secondary" disabled={busy || running} onClick={act(seedFixture)}>Seed 200</Button>
+        <Button className="h-9 px-3" variant="secondary" disabled={busy || running} onClick={act(seedDemo)}>Seed demo</Button>
+
+        {running ? (
+          <>
+            {paused ? (
+              <Button className="h-9 px-4 bg-emerald-600 text-white hover:bg-emerald-500" disabled={busy} onClick={act(resumeBatch)}>Resume</Button>
+            ) : (
+              <Button className="h-9 px-4 bg-amber-500 text-white hover:bg-amber-400" disabled={busy} onClick={act(pauseBatch)}>Pause</Button>
+            )}
+            <Button className="h-9 px-4 bg-orange-600 text-white hover:bg-orange-500" disabled={busy} onClick={act(cancelBatch)}>Stop</Button>
+          </>
+        ) : (
+          <Button className="h-9 px-5" disabled={busy || total === 0} onClick={act(() => runBatchAsync(limit ? Number(limit) : undefined))}>Run</Button>
+        )}
+
+        {hasQueued ? (
+          <Button className="h-9 px-3" variant="outline" disabled={busy} onClick={act(requeueBatch)}>Requeue</Button>
+        ) : null}
+
+        <div className="ml-auto">
+          <Button className="h-9 px-4 bg-red-600 text-white hover:bg-red-500" disabled={busy || (total === 0 && !running)} onClick={act(clearBatch)}>
             Kill &amp; clear
           </Button>
         </div>
-      }
-    >
-      <div className={`mb-3 flex items-center gap-2 text-xs ${muted}`}>
-        <span>{total} items in queue</span>
-        {running ? (
-          <span className={`rounded-full px-2 py-0.5 font-medium ${paused ? "bg-amber-500/20 text-amber-400" : "bg-emerald-500/20 text-emerald-400"}`}>
-            {paused ? "paused" : "running"}
-          </span>
-        ) : null}
-      </div>
-      <div className="space-y-2">
-        {ORDER.filter((s) => counts[s]).map((s) => {
-          const n = counts[s];
-          return (
-            <div key={s} className="flex items-center gap-3">
-              <div className="w-28"><StatusBadge status={s} /></div>
-              <div className={`h-2 flex-1 rounded ${track}`}>
-                <div className={`h-2 rounded ${fill}`} style={{ width: total ? `${(n / total) * 100}%` : "0%" }} />
-              </div>
-              <div className="w-10 text-right text-sm tabular-nums">{n}</div>
-            </div>
-          );
-        })}
       </div>
     </Panel>
   );

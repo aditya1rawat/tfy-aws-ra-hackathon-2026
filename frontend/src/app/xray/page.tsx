@@ -74,10 +74,9 @@ export default function XrayPage() {
 					<BatchMonitorPanel tone='dark' />
 				</section>
 
-				{/* Right rail: audit trail */}
-				<aside className='lg:col-span-1 h-full'>
-					{/* Fit to viewport: subtract the persona nav (~2.5rem) + main top padding + a bottom gap. */}
-					<div className='lg:sticky lg:top-4 h-full'>
+				{/* Right rail: audit trail — bounded to the viewport so it scrolls internally */}
+				<aside className='lg:col-span-1'>
+					<div className='lg:sticky lg:top-4 lg:h-[calc(100dvh-6rem)]'>
 						<AuditPanel tone='dark' />
 					</div>
 				</aside>

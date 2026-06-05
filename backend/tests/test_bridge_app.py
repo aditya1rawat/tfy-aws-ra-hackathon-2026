@@ -101,6 +101,19 @@ def test_chaos_set_rejects_bad_mode(client):
     assert r.status_code == 400
 
 
+def test_chaos_action_recorded_in_audit(client):
+    client.post("/chaos/set", json={"server": "chart", "tool": "get_patient_chart", "mode": "fail"})
+    events = client.get("/audit").json()["events"]
+    assert any(e["server"] == "chart" and not e["ok"] for e in events)
+
+
+def test_batch_clear_wipes_audit_trail(client):
+    client.post("/chaos/set", json={"server": "chart", "tool": "get_patient_chart", "mode": "fail"})
+    assert client.get("/audit").json()["events"]          # has the chaos entry
+    client.post("/batch/clear")
+    assert client.get("/audit").json()["events"] == []    # cleared
+
+
 def test_chaos_scenario_applies(client):
     r = client.post("/chaos/scenario/tool_outage")
     assert r.status_code == 200

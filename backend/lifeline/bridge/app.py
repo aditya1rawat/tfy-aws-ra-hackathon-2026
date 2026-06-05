@@ -192,9 +192,10 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
 
     @app.post("/batch/clear")
     def batch_clear() -> dict:
-        """Kill switch: stop the run and wipe the queue clean."""
+        """Kill switch: stop the run, wipe the queue, and clear the audit trail."""
         batch_control.cancel()
         removed = store.clear()
+        audit.clear()
         return {"cleared": removed, **batch_control.snapshot()}
 
     @app.get("/batch/control")
@@ -220,14 +221,19 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
         if req.mode not in VALID_MODES:
             return JSONResponse(status_code=400, content={"error": f"bad mode {req.mode!r}"})
         controller.set(req.server, req.tool, req.mode, latency_s=req.latency_s)
+        # Log the injection so the audit trail reflects the action immediately,
+        # not only once a run later hits the tool.
+        audit.record(req.server, req.tool, False, error=f"chaos: {req.mode} injected")
         return {"ok": True}
 
     @app.post("/chaos/clear")
     def chaos_clear(req: ChaosClearRequest) -> dict:
         if req.server and req.tool:
             controller.clear(req.server, req.tool)
+            audit.record(req.server, req.tool, True, error="chaos cleared")
         else:
             controller.clear_all()
+            audit.record("chaos", "all", True, error="chaos cleared")
         return {"ok": True}
 
     @app.get("/chaos/state")
@@ -325,6 +331,10 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
     @app.post("/chaos/llm")
     def chaos_llm(req: LlmChaos) -> dict:
         set_llm_killed(req.killed)
+        if req.killed:
+            audit.record("llm", "primary_model", False, error="chaos: LLM provider killed")
+        else:
+            audit.record("llm", "primary_model", True, error="LLM provider restored")
         return {"ok": True, "killed": req.killed}
 
     @app.get("/xray/runs")
