@@ -52,33 +52,37 @@ export default function XrayPage() {
 					onClear={wrap(() => clearChaos())}
 				/>
 			</div>
-			{/* Batch processing up top — the "at scale" headline */}
-			<div className='mb-4'>
-				<BatchMonitorPanel tone='dark' />
-			</div>
+			<div className='grid grid-cols-1 items-start gap-4 lg:grid-cols-4'>
+				{/* Main column: batch on top, then live/event + proof/cost */}
+				<div className='space-y-4 lg:col-span-3'>
+					<BatchMonitorPanel tone='dark' />
 
-			<div className='grid grid-cols-1 items-start gap-4 lg:grid-cols-3'>
-				{/* Main column: live run, event stream, then proof + cost side by side */}
-				<section className='space-y-4 lg:col-span-2'>
-					<div>
-						<h2 className='mb-2 text-[10px] uppercase tracking-wide text-zinc-500'>
-							Live run · {latest?.patient_id ?? '—'}
-						</h2>
-						<NodeGraph run={latest} />
-					</div>
-					<div>
-						<h2 className='mb-2 text-[10px] uppercase tracking-wide text-zinc-500'>
-							Event stream
-						</h2>
-						<EventLog runs={runs} />
-					</div>
-					<div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
-						<ProofPanels state={system} latest={latest} />
-						<CostPanel tone='dark' />
-					</div>
-				</section>
+					<div className='grid grid-cols-1 items-start gap-4 lg:grid-cols-3'>
+						{/* Live run + event stream */}
+						<section className='space-y-4 lg:col-span-2'>
+							<div>
+								<h2 className='mb-2 text-[10px] uppercase tracking-wide text-zinc-500'>
+									Live run · {latest?.patient_id ?? '—'}
+								</h2>
+								<NodeGraph run={latest} />
+							</div>
+							<div>
+								<h2 className='mb-2 text-[10px] uppercase tracking-wide text-zinc-500'>
+									Event stream
+								</h2>
+								<EventLog runs={runs} />
+							</div>
+						</section>
 
-				{/* Right rail: audit trail — bounded to the viewport so it scrolls internally */}
+						{/* Proof panels stacked on cost / routing */}
+						<section className='space-y-4 lg:col-span-1'>
+							<ProofPanels state={system} latest={latest} />
+							<CostPanel tone='dark' />
+						</section>
+					</div>
+				</div>
+
+				{/* Right rail: audit trail — whole right side, alongside batch */}
 				<aside className='lg:col-span-1'>
 					<div className='lg:sticky lg:top-4 lg:h-[calc(100dvh-6rem)]'>
 						<AuditPanel tone='dark' />
