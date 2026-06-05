@@ -32,11 +32,13 @@ def make_request_store(settings):
 
 def make_checkpointer(settings):
     if _is_postgres(settings.database_url):
-        import psycopg
         from langgraph.checkpoint.postgres import PostgresSaver
 
-        conn = psycopg.connect(settings.database_url, autocommit=True, prepare_threshold=0)
-        saver = PostgresSaver(conn)
+        from lifeline.bridge.pg_pool import make_pool
+
+        # Pool (revalidated borrows) so an idle Neon drop never kills a checkpoint
+        # read/write mid-run — the durable-resume beat depends on this surviving.
+        saver = PostgresSaver(make_pool(settings.database_url))
         saver.setup()
         return saver
     conn = sqlite3.connect(settings.checkpoint_db_path, check_same_thread=False)
