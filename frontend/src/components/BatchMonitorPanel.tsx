@@ -7,7 +7,7 @@ import { Panel } from "@/components/Panel";
 import { useLive } from "@/hooks/useLive";
 import {
   cancelBatch, clearBatch, getBatchControl, getBatchStatus,
-  pauseBatch, requeueBatch, resumeBatch, runBatchAsync, seedDemo, seedFixture,
+  pauseBatch, requeueBatch, resumeBatch, runBatchAsync, seedDemo, seedFixture, seedN,
 } from "@/lib/api";
 
 const STATUS_KEY = "/batch/status";
@@ -26,7 +26,7 @@ const STATES: { key: string; label: string; dot: string; seg: string }[] = [
 export function BatchMonitorPanel({ tone = "light" }: { tone?: "light" | "dark" }) {
   const status = useLive(STATUS_KEY, getBatchStatus, 800);
   const control = useLive(CONTROL_KEY, getBatchControl, 800);
-  const [limit, setLimit] = useState("");
+  const [seedCount, setSeedCount] = useState("");
   const [busy, setBusy] = useState(false);
 
   const counts = status?.counts ?? {};
@@ -50,6 +50,13 @@ export function BatchMonitorPanel({ tone = "light" }: { tone?: "light" | "dark" 
   };
 
   const hasQueued = (counts.queued ?? 0) > 0;
+  const seedNum = seedCount ? Number(seedCount) : 0;
+
+  // Run: optionally seed N fresh jobs first, then process the whole queue.
+  const onRun = act(async () => {
+    if (seedNum > 0) await seedN(seedNum);
+    await runBatchAsync();
+  });
 
   return (
     <Panel
@@ -100,10 +107,10 @@ export function BatchMonitorPanel({ tone = "light" }: { tone?: "light" | "dark" 
       {/* Controls */}
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <Input
-          value={limit}
-          onChange={(e) => setLimit(e.target.value.replace(/\D/g, ""))}
-          placeholder="limit"
-          className={`h-9 w-20 ${dark ? "border-zinc-700 bg-zinc-800 text-zinc-100 placeholder:text-zinc-500" : ""}`}
+          value={seedCount}
+          onChange={(e) => setSeedCount(e.target.value.replace(/\D/g, ""))}
+          placeholder="# jobs"
+          className={`h-9 w-24 ${dark ? "border-zinc-700 bg-zinc-800 text-zinc-100 placeholder:text-zinc-500" : ""}`}
         />
         <Button className="h-9 px-3" variant="secondary" disabled={busy || running} onClick={act(seedFixture)}>Seed 200</Button>
         <Button className="h-9 px-3" variant="secondary" disabled={busy || running} onClick={act(seedDemo)}>Seed demo</Button>
@@ -118,7 +125,9 @@ export function BatchMonitorPanel({ tone = "light" }: { tone?: "light" | "dark" 
             <Button className="h-9 px-4 bg-orange-600 text-white hover:bg-orange-500" disabled={busy} onClick={act(cancelBatch)}>Stop</Button>
           </>
         ) : (
-          <Button className="h-9 px-5" disabled={busy || total === 0} onClick={act(() => runBatchAsync(limit ? Number(limit) : undefined))}>Run</Button>
+          <Button className="h-9 px-5" disabled={busy || (total === 0 && seedNum === 0)} onClick={onRun}>
+            {seedNum > 0 ? `Seed ${seedNum} & run` : "Run"}
+          </Button>
         )}
 
         {hasQueued ? (

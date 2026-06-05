@@ -170,6 +170,17 @@ def test_cors_header_present(client):
     assert r.headers.get("access-control-allow-origin") in ("*", "http://localhost:3000")
 
 
+def test_seed_n_seeds_requested_count(client):
+    assert client.post("/batch/seed_n", json={"count": 5}).json()["seeded"] == 5
+    assert client.get("/batch/status").json()["counts"]["pending"] == 5
+
+
+def test_seed_n_unique_across_calls(client):
+    client.post("/batch/seed_n", json={"count": 3})
+    client.post("/batch/seed_n", json={"count": 3})
+    assert client.get("/batch/status").json()["counts"]["pending"] == 6  # no id collisions
+
+
 def test_seed_fixture_loads_200(client):
     out = client.post("/batch/seed_fixture").json()
     assert out["seeded"] == 200

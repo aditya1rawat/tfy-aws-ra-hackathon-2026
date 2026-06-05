@@ -29,6 +29,9 @@ export const seedFixture = () =>
 export const seedDemo = () =>
   req<{ seeded: number }>("/batch/seed_demo", { method: "POST" });
 
+export const seedN = (count: number) =>
+  req<{ seeded: number }>("/batch/seed_n", { method: "POST", body: JSON.stringify({ count }) });
+
 export const runBatch = (limit?: number) =>
   req<{ counts: Counts }>("/batch/run", {
     method: "POST",

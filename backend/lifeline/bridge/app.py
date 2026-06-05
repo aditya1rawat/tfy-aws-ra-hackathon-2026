@@ -45,6 +45,10 @@ class RunRequest(BaseModel):
     limit: int | None = None
 
 
+class SeedNRequest(BaseModel):
+    count: int
+
+
 # Free-text care-coordinator requests (valid fixture ids) that go through the
 # LLM intake — used by /batch/seed_demo to populate the cost/routing panel.
 _DEMO_FREETEXT = [
@@ -152,6 +156,24 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
         cost/routing panel when USE_TF routes to live models)."""
         store.seed(_DEMO_FREETEXT)
         return {"seeded": len(_DEMO_FREETEXT)}
+
+    @app.post("/batch/seed_n")
+    def batch_seed_n(req: SeedNRequest) -> dict:
+        """Seed an arbitrary number of jobs (the Run-with-count control).
+
+        Cycles the fixture queue and stamps each item with a unique id so
+        repeated runs never collide on the INSERT OR IGNORE primary key.
+        """
+        count = max(0, req.count)
+        base = load_fixture("batch_queue.json")
+        nonce = uuid.uuid4().hex[:8]
+        items = []
+        for i in range(count):
+            src = dict(base[i % len(base)])
+            src["item_id"] = f"{nonce}_{i:05d}"
+            items.append(src)
+        store.seed(items)
+        return {"seeded": len(items)}
 
     @app.post("/batch/run")
     def batch_run(req: RunRequest) -> dict:
