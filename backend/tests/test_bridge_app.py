@@ -53,7 +53,8 @@ def test_interactive_streams_sse_events(client):
         assert r.status_code == 200
         payloads = [json.loads(line[5:]) for line in r.iter_lines() if line.startswith("data:")]
     nodes = [p["node"] for p in payloads]
-    assert nodes[0] == "intake"
+    assert nodes[0] == "recall"
+    assert "intake" in nodes
     assert payloads[-1]["status"] == "done"
 
 

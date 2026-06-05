@@ -31,11 +31,12 @@ def _bind(node_fn, deps: Deps):
 def build_graph(deps: Deps, *, checkpointer, interrupt_before: list[str] | None = None):
     """Assemble and compile the per-item pipeline graph."""
     builder = StateGraph(ItemState)
-    for name in ["intake", "redact", "load_context", "interaction",
+    for name in ["recall", "intake", "redact", "load_context", "interaction",
                  "coverage", "act", "validate", "finalize"]:
         builder.add_node(name, _bind(getattr(nodes, name), deps))
 
-    builder.add_edge(START, "intake")
+    builder.add_edge(START, "recall")
+    builder.add_edge("recall", "intake")
     builder.add_edge("intake", "redact")
     builder.add_edge("redact", "load_context")
     builder.add_conditional_edges("load_context", _route_after_load,
