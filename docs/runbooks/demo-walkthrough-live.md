@@ -101,10 +101,43 @@ curl -s -X POST $BURL/patient/request -H 'content-type: application/json' \
 curl -s $BURL/patient/p_001/requests              # escalated + acetaminophen alt
 ```
 
+---
+
+## B2 — Deeper resilience (rate-limit, timeout, cascading) + visualization
+
+B2 adds chaos-injectable rate-limit / timeout / cascading failure modes and makes the
+retry-backoff-recovery **visible**: a per-run `ResilienceLog` surfaced on `/xray` as a
+**Resilience timeline** panel + per-node **retry/outcome badges**. New `/xray` levers:
+**Rate-limit LLM**, **Cascade**, alongside Kill LLM / Kill chart tool / Clear chaos.
+
+### Beat 6 — Rate-limit → cross/within-Bedrock fallback (AI Gateway)
+- **Do:** `/xray` → **Rate-limit LLM**, submit a request.
+- **Result:** intake's primary attempt records `fail (ratelimit)`, backs off, then the
+  fallback model answers `recovered`. The timeline panel shows the full attempt→recover
+  story; the node badge shows `⟳1 ✓`.
+- **Verify:** `POST /chaos/llm {"mode":"ratelimit"}` → request → `GET /xray/resilience?run_id=<id>`.
+
+### Beat 7 — Timeout → graceful degrade (Resilience: slow responses)
+- **Do:** `POST /chaos/set {"server":"chart","tool":"get_patient_chart","mode":"timeout"}` → submit.
+- **Result:** the chart call raises a timeout, retries with backoff, then degrades to
+  `queued`; timeline shows `timeout` + `degraded`. A real provider overrun trips the same
+  path via the per-call wall-clock cutoff (`CALL_TIMEOUT_S`, default 5s) on MCP calls.
+
+### Beat 8 — Cascading failure, contained (Resilience: cascading errors)
+- **Do:** `/xray` → **Cascade** (`POST /chaos/scenario/cascade`) → submit.
+- **Result:** chart `slow` + formulary `ratelimit` + insurer `timeout` all at once; each
+  node degrades independently, the run still reaches a terminal state (no crash), and the
+  timeline shows multiple layers failing/recovering/degrading in one run.
+
+### What makes it legible
+- **Resilience timeline panel** — per-run `attempt → backoff → recovered/degraded`.
+- **Node badges** — `⟳N ✓` (recovered) / `⟳N ⚠` (degraded) per node.
+- **`/batch/clear`** wipes the resilience log too (clean slate for the next take).
+
 ## Notes
 
 - The per-deploy Vercel hash URL is auth-walled (401); the **stable** domain
   `lifeline-dusky-zeta.vercel.app` is public.
 - MCP endpoint must be the no-trailing-slash form (`…/mcp`); `…/mcp/` 307-redirects to http.
 - Offline mode (`USE_TF=false`) still works for a no-network fallback demo; the full test
-  suite (243) runs without any live dependency.
+  suite (272 backend + 23 frontend) runs without any live dependency.

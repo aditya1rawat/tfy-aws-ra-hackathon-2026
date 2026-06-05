@@ -8,18 +8,23 @@ import { ChaosControls } from '@/components/xray/ChaosControls';
 import { EventLog } from '@/components/xray/EventLog';
 import { NodeGraph } from '@/components/xray/NodeGraph';
 import { ProofPanels } from '@/components/xray/ProofPanels';
+import { ResilienceTimelinePanel } from '@/components/xray/ResilienceTimelinePanel';
 import { useLive } from '@/hooks/useLive';
 import {
+	applyCascade,
 	clearChaos,
+	getResilience,
 	getSystemState,
 	getXrayRuns,
 	setChaos,
-	setLlmChaos
+	setLlmChaos,
+	setLlmMode
 } from '@/lib/api';
 
 export default function XrayPage() {
 	const system = useLive('/system/state', getSystemState);
 	const xray = useLive('/xray/runs', () => getXrayRuns(20));
+	const resilience = useLive('/xray/resilience', () => getResilience(), 1500);
 	const [busy, setBusy] = useState(false);
 	const runs = xray?.runs ?? [];
 	const latest = runs[0] ?? null;
@@ -29,6 +34,7 @@ export default function XrayPage() {
 		try {
 			await fn();
 			await mutate('/system/state');
+			await mutate('/xray/resilience');
 		} finally {
 			setBusy(false);
 		}
@@ -41,7 +47,9 @@ export default function XrayPage() {
 				<ChaosControls
 					state={system}
 					busy={busy}
-					onKillLlm={k => wrap(() => setLlmChaos(k))()}
+					onLlmMode={m =>
+						wrap(() => (m === 'none' ? setLlmChaos(false) : setLlmMode(m)))()
+					}
 					onKillTool={wrap(() =>
 						setChaos({
 							server: 'chart',
@@ -49,6 +57,7 @@ export default function XrayPage() {
 							mode: 'fail'
 						})
 					)}
+					onCascade={wrap(() => applyCascade())}
 					onClear={wrap(() => clearChaos())}
 				/>
 			</div>
@@ -76,8 +85,9 @@ export default function XrayPage() {
 							</div>
 						</section>
 
-						{/* Proof panels stacked on cost / routing */}
+						{/* Resilience timeline stacked on proof + cost / routing */}
 						<section className='space-y-4 lg:col-span-1'>
+							<ResilienceTimelinePanel events={resilience?.events ?? []} />
 							<ProofPanels state={system} latest={latest} />
 							<CostPanel tone='dark' />
 						</section>

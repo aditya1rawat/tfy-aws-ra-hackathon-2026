@@ -2,29 +2,37 @@
 import { Button } from "@/components/ui/button";
 import type { SystemState } from "@/lib/types";
 
-// Explicit colors (not the theme variants) so every state contrasts on the dark page.
 const IDLE = "h-9 px-4 border border-zinc-700 bg-zinc-800 text-zinc-100 hover:bg-zinc-700";
 const ACTIVE = "h-9 px-4 border border-red-500 bg-red-600 text-white hover:bg-red-500";
+const WARN = "h-9 px-4 border border-amber-500 bg-amber-600 text-white hover:bg-amber-500";
 
 export function ChaosControls({
-  state, onKillLlm, onKillTool, onClear, busy,
+  state, onLlmMode, onKillTool, onCascade, onClear, busy,
 }: {
   state: SystemState | null;
-  onKillLlm: (killed: boolean) => void;
+  onLlmMode: (mode: string) => void;
   onKillTool: () => void;
+  onCascade: () => void;
   onClear: () => void;
   busy: boolean;
 }) {
-  const killed = state?.llm_killed ?? false;
+  const mode = state?.llm_killed ? "fail" : "none";
   const toolActive = (state?.active_chaos?.length ?? 0) > 0;
-  const anyChaos = killed || toolActive;
+  const anyChaos = mode !== "none" || toolActive;
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button className={killed ? ACTIVE : IDLE} disabled={busy} onClick={() => onKillLlm(!killed)}>
-        {killed ? "⚡ LLM killed" : "Kill LLM"}
+      <Button className={mode === "fail" ? ACTIVE : IDLE} disabled={busy}
+              onClick={() => onLlmMode(mode === "fail" ? "none" : "fail")}>
+        {mode === "fail" ? "⚡ LLM killed" : "Kill LLM"}
+      </Button>
+      <Button className={IDLE} disabled={busy} onClick={() => onLlmMode("ratelimit")}>
+        Rate-limit LLM
       </Button>
       <Button className={toolActive ? ACTIVE : IDLE} disabled={busy} onClick={onKillTool}>
         {toolActive ? "⚡ Tool failing" : "Kill chart tool"}
+      </Button>
+      <Button className={WARN} disabled={busy} onClick={onCascade}>
+        Cascade
       </Button>
       <Button
         className={`h-9 px-4 border ${anyChaos ? "border-emerald-500 bg-emerald-600 text-white hover:bg-emerald-500" : "border-zinc-700 bg-zinc-900 text-zinc-400"}`}

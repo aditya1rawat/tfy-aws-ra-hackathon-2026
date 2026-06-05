@@ -18,6 +18,10 @@ class LLMUnavailable(Exception):
     """Raised when an LLM client cannot produce a result."""
 
 
+class LLMRateLimited(LLMUnavailable):
+    """Injected 429-style rate limit on an LLM client."""
+
+
 class LLMClient(Protocol):
     name: str
 
@@ -66,28 +70,52 @@ class PatternLLM:
 class ResilientLLM:
     """Try each client in order; retry each up to `retries` times before moving on.
 
-    Implements the app-owned model-fallback layer that complements the TF
-    gateway's own virtual-model fallback.
+    Records per-attempt failures + the recovering client to a ResilienceLog (when
+    provided), so the x-ray can show the model-fallback story.
     """
 
-    def __init__(self, clients: list[LLMClient], retries: int = 2):
+    def __init__(self, clients: list[LLMClient], retries: int = 2,
+                 rlog=None, run_id_get=None):
         if not clients:
             raise ValueError("ResilientLLM needs at least one client")
         self._clients = clients
         self._retries = retries
         self.name = "resilient"
         self.last_model: str | None = None
+        self._rlog = rlog
+        self._run_id_get = run_id_get or (lambda: None)
+
+    def _mode_of(self, err: Exception) -> str:
+        if isinstance(err, LLMRateLimited):
+            return "ratelimit"
+        return "fail"
 
     def parse_intent(self, text: str) -> Intent:
         last_err: Exception | None = None
+        degraded_once = False  # any failure before the answering client?
         for client in self._clients:
-            for _ in range(self._retries):
+            for attempt in range(self._retries):
                 try:
                     out = client.parse_intent(text)
                     self.last_model = client.name
+                    if degraded_once and self._rlog is not None:
+                        self._rlog.record(self._run_id_get(), layer="llm",
+                                          target=client.name, attempt=attempt + 1,
+                                          mode=None, backoff_ms=0, outcome="recovered",
+                                          recovered_by=client.name)
                     return out
                 except LLMUnavailable as err:
                     last_err = err
+                    degraded_once = True
+                    if self._rlog is not None:
+                        self._rlog.record(self._run_id_get(), layer="llm",
+                                          target=client.name, attempt=attempt + 1,
+                                          mode=self._mode_of(err), backoff_ms=0,
+                                          outcome="fail")
+        if self._rlog is not None:
+            self._rlog.record(self._run_id_get(), layer="llm", target="(exhausted)",
+                              attempt=0, mode=self._mode_of(last_err) if last_err else "fail",
+                              backoff_ms=0, outcome="degraded")
         raise LLMUnavailable(f"all LLM clients exhausted: {last_err}")
 
 
@@ -119,24 +147,37 @@ class TFGatewayLLM:
             raise LLMUnavailable(f"{self.name}: {err}") from err
 
 
-# --- App-level LLM chaos lever (demo: force the primary model to fail) ---
-_llm_chaos = {"killed": False}
+# --- App-level LLM chaos lever (demo: force the primary model to misbehave) ---
+import time as _time
+
+_llm_chaos = {"mode": "none"}  # none | fail | ratelimit | slow
+_LLM_SLOW_S = 3.0
+
+
+def set_llm_mode(mode: str) -> None:
+    """Set the LLM chaos mode (none|fail|ratelimit|slow)."""
+    _llm_chaos["mode"] = mode
+
+
+def get_llm_mode() -> str:
+    return _llm_chaos["mode"]
 
 
 def set_llm_killed(killed: bool) -> None:
-    """Toggle the global LLM chaos flag (used by ChaosLLM)."""
-    _llm_chaos["killed"] = bool(killed)
+    """Back-compat: kill == fail mode."""
+    _llm_chaos["mode"] = "fail" if killed else "none"
 
 
 def is_llm_killed() -> bool:
-    return _llm_chaos["killed"]
+    return _llm_chaos["mode"] == "fail"
 
 
 class ChaosLLM:
-    """Wrap an LLM client; raise LLMUnavailable while the chaos flag is set.
+    """Wrap an LLM client; inject the current LLM chaos mode on parse_intent.
 
-    Lets the presenter kill the primary model on demand so ResilientLLM falls
-    back — the live model-fallback beat, offline or against the gateway.
+    none → passthrough; fail → LLMUnavailable; ratelimit → LLMRateLimited;
+    slow → sleep then passthrough. Lets the presenter make the primary model
+    fail / rate-limit / lag so ResilientLLM falls back.
     """
 
     def __init__(self, inner: LLMClient):
@@ -144,6 +185,11 @@ class ChaosLLM:
         self.name = inner.name
 
     def parse_intent(self, text: str) -> Intent:
-        if is_llm_killed():
+        mode = get_llm_mode()
+        if mode == "fail":
             raise LLMUnavailable(f"{self.name}: killed by chaos")
+        if mode == "ratelimit":
+            raise LLMRateLimited(f"{self.name}: rate limited by chaos")
+        if mode == "slow":
+            _time.sleep(_LLM_SLOW_S)
         return self._inner.parse_intent(text)
