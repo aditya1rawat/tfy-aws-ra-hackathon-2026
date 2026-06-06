@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import threading
+import time
 import uuid
 
 from fastapi import FastAPI
@@ -238,6 +239,32 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
     @app.get("/batch/control")
     def batch_control_state() -> dict:
         return batch_control.snapshot()
+
+    @app.post("/demo/reset")
+    def demo_reset() -> dict:
+        """One-click clean slate for the recorded demo: wipe batch, requests,
+        chaos, resilience log; restore the Bedrock primary (LLM mode → none)."""
+        batch_control.cancel()
+        cleared = store.clear()
+        requests = request_store.clear()
+        audit.clear()
+        rlog.clear()
+        controller.clear_all()
+        set_llm_mode("none")
+        return {"ok": True, "cleared": cleared, "requests": requests}
+
+    @app.post("/demo/seed_hero")
+    def demo_seed_hero() -> dict:
+        """Put the demo in its canonical opening state: p_001 (warfarin in the
+        fixture) gains a prior aspirin-escalation memory, so the returning-patient
+        beat lands on the first recorded request. Best-effort (HydraDB ingestion is
+        async — seed a few seconds before recording)."""
+        deps.memory.write("p_001", {
+            "med": "m_aspirin", "request_type": "refill",
+            "outcome": "escalated", "reason": "additive bleeding risk",
+            "ts": time.time(),
+        })
+        return {"ok": True, "hero_patient": "p_001"}
 
     @app.post("/batch/requeue")
     def batch_requeue(req: RequeueRequest) -> dict:
