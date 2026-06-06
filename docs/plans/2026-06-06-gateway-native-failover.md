@@ -163,7 +163,8 @@ class _FakeStructured:
     def __init__(self, resolved):
         self._resolved = resolved
     def invoke(self, prompt):
-        raw = type("AI", (), {"response_metadata": {"headers": {"x-tfy-resolved-model": self._resolved}}})()
+        # gateway reports the serving model in the standard model_name field
+        raw = type("AI", (), {"response_metadata": {"model_name": self._resolved, "headers": {}}})()
         return {"parsed": Intent(patient_id="p_001", request_type="refill", med_id="m_aspirin"),
                 "raw": raw, "parsing_error": None}
 
@@ -224,11 +225,17 @@ class TFGatewayLLM:
             raise LLMUnavailable(f"{self.name}: {err}") from err
         raw = result.get("raw")
         meta = getattr(raw, "response_metadata", {}) or {}
-        self.last_resolved_model = (meta.get("headers") or {}).get("x-tfy-resolved-model")
+        # Gateway reports the serving model in the standard model_name field
+        # (verified live, Task 0a). Custom x-tfy-resolved-model header is a
+        # secondary fallback (absent on direct calls; may appear on virtual models).
+        self.last_resolved_model = (
+            meta.get("model_name")
+            or (meta.get("headers") or {}).get("x-tfy-resolved-model")
+        )
         return result["parsed"]
 ```
 
-> **Fallback-path note (from Task 0a):** if the header does not surface via `include_raw`, implement `parse_intent` with a raw `httpx` POST for the header per Task 0a Step 3, keeping `last_resolved_model` semantics identical.
+> **Task 0a result:** `include_response_headers=True` + `include_raw=True` works; `response_metadata['model_name']` carries the resolved model and equals `TF_PRIMARY_MODEL` when the primary serves. Confirm `model_name` reflects the rerouted target on a real virtual-model call at live smoke (Phase 6).
 
 - [ ] **Step 4: Run, verify pass + no regressions**
 
