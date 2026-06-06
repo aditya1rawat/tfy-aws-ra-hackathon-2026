@@ -134,10 +134,43 @@ retry-backoff-recovery **visible**: a per-run `ResilienceLog` surfaced on `/xray
 - **Node badges** — `⟳N ✓` (recovered) / `⟳N ⚠` (degraded) per node.
 - **`/batch/clear`** wipes the resilience log too (clean slate for the next take).
 
+---
+
+## Memory — HydraDB cross-visit patient memory (degrade-safe)
+
+A new `recall` node runs **first** in the pipeline. It pulls the patient's prior request
+outcomes from HydraDB (scoped per patient via `sub_tenant_id = patient_id`) into
+`state.patient_history`. `finalize` writes each terminal outcome back as a compact fact
+(`med`, `request_type`, `outcome`, `reason`, `ts`). History feeds two things: free-text
+intent parsing (`parse_intent(..., history=...)`) and a memory-aware clinic narrative.
+Memory **never** touches the deterministic interaction guardrail.
+
+### Beat 9 — Returning patient + memory degrade (HydraDB, degrade-safe)
+- **Setup (returning patient):** Submit a request for a patient that escalates (e.g.
+  aspirin-on-warfarin) → `finalize` writes an `escalated` fact. Wait a few seconds
+  (HydraDB ingestion is async). Submit a **second** request for the **same** patient.
+- **Result:** the clinic console shows a **Returning patient** panel listing the prior
+  visit(s) with outcome chips; if the same med was previously escalated, the clinic flag
+  is prefixed **"Previously flagged on a prior visit."** The agent had the history before
+  triage (recall is the entry node).
+- **Degrade:** break HydraDB (bad key / network) and submit again → the `recall` node
+  records `layer=memory · degraded` on the `/xray` timeline, `patient_history` is empty,
+  and **the request still completes and the patient is still served**. Memory is a
+  nice-to-have, not a single point of failure.
+- **Verify:** `GET /patient/<id>/history` → `{visits, history:[...]}` (returns
+  `{visits:0, history:[]}` when HydraDB is down or unconfigured — never 500s).
+
+> Live-verify status: run the two-request flow + the degrade path against the deployed
+> stack after this branch deploys; record the exact panel text + xray state here
+> (mirroring beats 1–8). HydraDB add/recall shape verified live during implementation
+> (facts stored as `infer=false` JSON in `chunk_content`; recall lags ingestion by ~seconds).
+
 ## Notes
 
 - The per-deploy Vercel hash URL is auth-walled (401); the **stable** domain
   `lifeline-dusky-zeta.vercel.app` is public.
 - MCP endpoint must be the no-trailing-slash form (`…/mcp`); `…/mcp/` 307-redirects to http.
 - Offline mode (`USE_TF=false`) still works for a no-network fallback demo; the full test
-  suite (272 backend + 23 frontend) runs without any live dependency.
+  suite (293 backend + 26 frontend) runs without any live dependency.
+- HydraDB ingestion is asynchronous: leave a few seconds between the first request and the
+  returning-patient recall, or the panel will show no prior history yet.
