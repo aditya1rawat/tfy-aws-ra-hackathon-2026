@@ -46,20 +46,37 @@ def test_resilient_raises_when_all_exhausted():
         llm.parse_intent("x")
 
 
+class _FakeStructured:
+    """Mimics ChatOpenAI.with_structured_output(..., include_raw=True): returns
+    {parsed, raw, parsing_error}; `raw.response_metadata.model_name` carries the
+    gateway's resolved (served) model."""
+
+    def __init__(self, intent, resolved):
+        self._intent = intent
+        self._resolved = resolved
+
+    def invoke(self, prompt):
+        raw = type("AI", (), {"response_metadata": {"model_name": self._resolved, "headers": {}}})()
+        return {"parsed": self._intent, "raw": raw, "parsing_error": None}
+
+
+class _FakeChat:
+    def __init__(self, intent, resolved):
+        self._intent = intent
+        self._resolved = resolved
+
+    def with_structured_output(self, schema, include_raw=False):
+        assert include_raw is True
+        return _FakeStructured(self._intent, self._resolved)
+
+
 def test_tf_gateway_llm_wires_base_url_and_parses(monkeypatch):
     captured = {}
-
-    class _FakeStructured:
-        def invoke(self, prompt):
-            return Intent(patient_id="p_001", request_type="prior_auth", med_id="m_adalimumab")
-
-    class _FakeChat:
-        def with_structured_output(self, schema):
-            return _FakeStructured()
+    intent = Intent(patient_id="p_001", request_type="prior_auth", med_id="m_adalimumab")
 
     def _fake_build(base_url, api_key, model):
         captured.update(base_url=base_url, api_key=api_key, model=model)
-        return _FakeChat()
+        return _FakeChat(intent, resolved="bedrock-main/claude")
 
     monkeypatch.setattr("lifeline.agent.llm._build_chat_model", _fake_build)
     llm = TFGatewayLLM(base_url="https://acme.truefoundry.cloud/api/llm/api/inference/openai",
@@ -69,3 +86,13 @@ def test_tf_gateway_llm_wires_base_url_and_parses(monkeypatch):
     assert captured["base_url"].endswith("/inference/openai")
     assert captured["model"] == "bedrock-main/claude"
     assert llm.name == "bedrock-main/claude"
+
+
+def test_tf_gateway_captures_resolved_model(monkeypatch):
+    intent = Intent(patient_id="p_001", request_type="refill", med_id="m_aspirin")
+    monkeypatch.setattr("lifeline.agent.llm._build_chat_model",
+                        lambda base, key, model: _FakeChat(intent, resolved="bedrock-main/claude-haiku-4-5"))
+    llm = TFGatewayLLM("base", "key", "lifeline/resilient-chat")
+    out = llm.parse_intent("patient p_001 refill m_aspirin")
+    assert out.med_id == "m_aspirin"
+    assert llm.last_resolved_model == "bedrock-main/claude-haiku-4-5"

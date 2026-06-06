@@ -129,25 +129,40 @@ def _build_chat_model(base_url: str, api_key: str, model: str):
     """Seam: build a LangChain chat model bound to the TF gateway. Patched in tests."""
     from langchain_openai import ChatOpenAI
 
-    return ChatOpenAI(base_url=base_url, api_key=api_key, model=model, temperature=0)
+    return ChatOpenAI(base_url=base_url, api_key=api_key, model=model,
+                      temperature=0, include_response_headers=True)
 
 
 class TFGatewayLLM:
-    """OpenAI-compatible client pointed at the TrueFoundry AI Gateway."""
+    """OpenAI-compatible client pointed at the TrueFoundry AI Gateway.
+
+    Captures the gateway's resolved (served) model so a gateway-internal failover
+    — the virtual model rerouting to a fallback target — is observable to the app.
+    The gateway reports the served model in the standard ``model_name`` response
+    metadata (verified live); ``x-tfy-resolved-model`` is a secondary fallback.
+    """
 
     def __init__(self, base_url: str, api_key: str, model: str):
         self.name = model
+        self.last_resolved_model: str | None = None
         chat = _build_chat_model(base_url, api_key, model)
-        self._structured = chat.with_structured_output(Intent)
+        self._structured = chat.with_structured_output(Intent, include_raw=True)
 
     def parse_intent(self, text: str, *, history: str = "") -> Intent:
         prompt = _INTENT_PROMPT.format(text=text)
         if history:
             prompt = f"Prior visits for this patient: {history}\n\n{prompt}"
         try:
-            return self._structured.invoke(prompt)
+            result = self._structured.invoke(prompt)
         except Exception as err:  # network/429/provider error → uniform signal for ResilientLLM
             raise LLMUnavailable(f"{self.name}: {err}") from err
+        raw = result.get("raw")
+        meta = getattr(raw, "response_metadata", {}) or {}
+        self.last_resolved_model = (
+            meta.get("model_name")
+            or (meta.get("headers") or {}).get("x-tfy-resolved-model")
+        )
+        return result["parsed"]
 
 
 # --- App-level LLM chaos lever (demo: force the primary model to misbehave) ---
