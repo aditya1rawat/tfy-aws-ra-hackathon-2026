@@ -1,3 +1,5 @@
+import time
+
 from lifeline.agent.deps import Deps, decide_action
 from lifeline.agent.guardrails import redact_phi, validate_output
 from lifeline.agent.llm import Intent, LLMUnavailable
@@ -45,8 +47,13 @@ def recall(state: ItemState, *, deps: Deps) -> dict:
 def intake(state: ItemState, *, deps: Deps) -> dict:
     """Resolve the request into a structured Intent (LLM only for free text)."""
     if state.get("raw_text"):
+        hist = state.get("patient_history") or []
+        history = "; ".join(
+            f"{f.get('request_type', '?')} {f.get('med', '?')} → {f.get('outcome', '?')}"
+            for f in hist
+        )
         try:
-            intent = deps.llm.parse_intent(state["raw_text"])
+            intent = deps.llm.parse_intent(state["raw_text"], history=history)
         except LLMUnavailable as err:
             if deps.audit is not None:
                 deps.audit.record("llm", deps.llm.name, False, error=str(err))
@@ -174,9 +181,20 @@ def validate(state: ItemState, *, deps: Deps) -> dict:
 
 
 def finalize(state: ItemState, *, deps: Deps) -> dict:
-    """Terminal node: record final status (defaults to done if still in progress)."""
+    """Terminal node: record final status; best-effort write to patient memory."""
     status = state["status"]
     if status not in Status.TERMINAL:
         status = Status.DONE
+    if deps.memory is not None:
+        try:  # best-effort; a memory write must never disrupt the terminal node
+            deps.memory.write(state["patient_id"], {
+                "med": state.get("med_id"),
+                "request_type": state.get("request_type"),
+                "outcome": status,
+                "reason": state.get("error") or "",
+                "ts": time.time(),
+            })
+        except Exception:
+            pass
     return {"status": status, "current_node": "finalize",
             "audit": [_audit("finalize", f"terminal={status}")]}
