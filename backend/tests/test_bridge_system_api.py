@@ -6,7 +6,9 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 
 from lifeline.agent.deps import Deps
 from lifeline.agent.guardrails import InProcessInteractionGuardrail
-from lifeline.agent.llm import ChaosLLM, PatternLLM, ResilientLLM, set_llm_killed
+from lifeline.agent.llm import (
+    ChaosLLM, PatternLLM, ResilientLLM, is_gateway_chaos, set_gateway_chaos, set_llm_killed,
+)
 from lifeline.agent.tools import InProcessBackend, ToolGateway
 from lifeline.audit import AuditLog
 from lifeline.batch.store import JobStore
@@ -17,9 +19,9 @@ from lifeline.chaos.controller import controller
 
 @pytest.fixture(autouse=True)
 def _reset():
-    set_llm_killed(False); controller.clear_all()
+    set_llm_killed(False); set_gateway_chaos(False); controller.clear_all()
     yield
-    set_llm_killed(False); controller.clear_all()
+    set_llm_killed(False); set_gateway_chaos(False); controller.clear_all()
 
 
 def _client():
@@ -50,3 +52,17 @@ def test_chaos_llm_toggles_degraded():
     assert s["degraded"] is True
     c.post("/chaos/llm", json={"killed": False})
     assert c.get("/system/state").json()["degraded"] is False
+
+
+def test_chaos_llm_gateway_failover_toggle():
+    c = _client()
+    r = c.post("/chaos/llm", json={"gateway_failover": True})
+    assert r.json()["gateway_failover"] is True
+    assert is_gateway_chaos() is True
+    c.post("/chaos/llm", json={"gateway_failover": False})
+    assert is_gateway_chaos() is False
+
+
+def test_system_state_reports_gateway_failover():
+    c = _client()
+    assert "gateway_failover" in c.get("/system/state").json()
