@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { mutate } from "swr";
+import { LiveNodeList } from "@/components/patient/LiveNodeList";
 import { MedicationsTable } from "@/components/patient/MedicationsTable";
 import { OutcomeCard } from "@/components/patient/OutcomeCard";
 import { PatientShell } from "@/components/patient/PatientShell";
@@ -9,7 +10,9 @@ import { SideCards } from "@/components/patient/SideCards";
 import { StatCards } from "@/components/patient/StatCards";
 import { StatusTimeline } from "@/components/patient/StatusTimeline";
 import { useLive } from "@/hooks/useLive";
+import { useNodeStream } from "@/hooks/useNodeStream";
 import { getPatientRequests, submitPatientRequest } from "@/lib/api";
+import { notify, notifyError } from "@/lib/toast";
 
 const PATIENT = "p_001";
 const KEY = `/patient/${PATIENT}/requests`;
@@ -18,15 +21,22 @@ const TODAY = new Date().toLocaleDateString("en-US", { weekday: "long", month: "
 export default function PatientPage() {
   const data = useLive(KEY, () => getPatientRequests(PATIENT));
   const [busy, setBusy] = useState(false);
+  const stream = useNodeStream();
   const requests = data?.requests ?? [];
   const pending = requests.filter((r) => ["checking", "escalated", "received"].includes(r.narrative.status)).length;
 
   const onSubmit = async (medId: string, reason: string) => {
     setBusy(true);
     try {
+      // Live stream the run so the timeline animates node-by-node.
+      await stream.start({ patient_id: PATIENT, med_id: medId, request_type: "refill", raw_text: reason });
+      notify("Request processed");
+    } catch {
+      // SSE unsupported / network → fall back to fire-and-forget submit.
       await submitPatientRequest({ patient_id: PATIENT, med_id: medId, reason });
-      await mutate(KEY);
+      notifyError("Live view unavailable — submitted in the background");
     } finally {
+      await mutate(KEY);
       setBusy(false);
     }
   };
@@ -52,6 +62,13 @@ export default function PatientPage() {
               </p>
               <RequestForm onSubmit={onSubmit} busy={busy} />
             </div>
+
+            {stream.running || stream.events.length > 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="mb-3 font-semibold">Processing your request…</h2>
+                <LiveNodeList events={stream.events} />
+              </div>
+            ) : null}
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-3 flex items-center justify-between">
