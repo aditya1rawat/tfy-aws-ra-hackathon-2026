@@ -47,6 +47,20 @@ export interface NarrativeStep {
   detail?: string;
 }
 
+export interface HistoryFact {
+  med: string;
+  request_type: string;
+  outcome: string;
+  reason: string;
+  ts: number;
+}
+
+export interface ReturningPatient {
+  visits: number;
+  last_ts: number;
+  history: HistoryFact[];
+}
+
 export interface RequestNarrative {
   status: string;
   degraded: boolean;
@@ -55,6 +69,7 @@ export interface RequestNarrative {
   patient_message: string;
   clinic_flag: string | null;
   suggested_alternative: { med: string; reason: string } | null;
+  returning_patient?: ReturningPatient | null;
 }
 
 export interface RequestSummary {
@@ -78,7 +93,7 @@ export interface SystemState {
 export interface ResilienceEvent {
   run_id: string | null;
   ts: number;
-  layer: "llm" | "tool";
+  layer: "llm" | "tool" | "memory";
   target: string;
   attempt: number;
   mode: string | null;

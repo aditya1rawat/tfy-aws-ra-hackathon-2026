@@ -1,5 +1,5 @@
 import type {
-  AuditEvent, BatchItem, ChaosEntry, Counts,
+  AuditEvent, BatchItem, ChaosEntry, Counts, HistoryFact,
   RequestSummary, ResilienceEvent, SystemState, XrayRun,
 } from "@/lib/types";
 
@@ -85,6 +85,9 @@ export const getPatientRequests = (patientId: string) =>
   req<{ requests: RequestSummary[] }>(`/patient/${patientId}/requests`);
 
 export const getClinicQueue = () => req<{ items: RequestSummary[] }>("/clinic/queue");
+
+export const getPatientHistory = (patientId: string) =>
+  req<{ visits: number; history: HistoryFact[] }>(`/patient/${patientId}/history`);
 
 export const clinicAction = (b: { request_id: string; action: string; note?: string }) =>
   req<{ ok: boolean; new_status: string }>("/clinic/action", { method: "POST", body: JSON.stringify(b) });
