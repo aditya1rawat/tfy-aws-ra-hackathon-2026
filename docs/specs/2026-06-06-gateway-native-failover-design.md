@@ -45,9 +45,9 @@ routing_config:
     - target: anthropic-main/claude-sonnet-4-6     # worst-case cross-provider
 ```
 
-Chaos virtual model (demo trigger — primary deliberately broken so the gateway always reroutes):
+**Single virtual model is preferred.** A second "chaos" virtual model is created ONLY if the verify-first probe (see Demo Trigger) finds no live trigger mechanism. Fallback chaos virtual model (primary deliberately broken so the gateway always reroutes):
 ```yaml
-# lifeline/resilient-chat-chaos
+# lifeline/resilient-chat-chaos  (FALLBACK ONLY)
 routing_config:
   type: priority-based-routing
   load_balance_targets:
@@ -63,13 +63,20 @@ The application resolves which target actually served a request via the `x-tfy-r
 
 ## Demo Trigger (deterministic; the gateway performs the real reroute)
 
-A new chaos lever, **"Gateway failover"**, swaps the application's active model string from `resilient-chat` to `resilient-chat-chaos`. The gateway's primary target returns 5xx, the gateway reroutes to the haiku target, and the response carries `x-tfy-resolved-model: …haiku`. The application reads the header and records the gateway-failover beat.
+**Single virtual model is the preferred trigger path.** The planning phase's verify-first probe checks, in order, for a live mechanism to knock out the primary target of the one production virtual model:
 
-This is deterministic and presenter-controlled, while the failover itself genuinely happens at the gateway (provable via the header). It is independent of the existing **"Kill LLM"** lever, which triggers the app-layer degrade-to-offline path.
+1. **Per-request override** — a gateway header/param that fails or skips the primary target for a single request (best case: app-controlled, zero extra config, fully real).
+2. **Per-target disable / mark-unhealthy API** — toggle the primary target off mid-demo; gateway reroutes; toggle back (most authentic operator story).
+
+If either exists → **single virtual model**: a new chaos lever **"Gateway failover"** triggers the mechanism, the gateway's primary returns/treats-as 5xx, reroutes to the haiku target, and the response carries `x-tfy-resolved-model: …haiku`. The application reads the header and records the gateway-failover beat.
+
+If neither exists → **two-virtual-model fallback**: the lever swaps the application's active model string from `resilient-chat` to `resilient-chat-chaos` (broken-primary vm); the reroute is still genuinely performed by the gateway and proven by the header.
+
+Either way the trigger is deterministic and presenter-controlled, while the failover itself genuinely happens at the gateway. It is independent of the existing **"Kill LLM"** lever, which triggers the app-layer degrade-to-offline path.
 
 ## Components / Files
 
-- `backend/lifeline/config.py` — add `virtual_model` and `chaos_virtual_model` settings (env `TF_VIRTUAL_MODEL`, `TF_CHAOS_VIRTUAL_MODEL`).
+- `backend/lifeline/config.py` — add `virtual_model` (env `TF_VIRTUAL_MODEL`). `chaos_virtual_model` (env `TF_CHAOS_VIRTUAL_MODEL`) is added only on the two-vm fallback path; unused on the single-vm path.
 - `backend/lifeline/agent/llm.py` —
   - `TFGatewayLLM` built with `include_response_headers=True` and `.with_structured_output(Intent, include_raw=True)`; capture `x-tfy-resolved-model` into `last_resolved_model`.
   - A small selector so the gateway client targets the healthy-vs-chaos virtual model based on a flag (`set_gateway_chaos(bool)` / `is_gateway_chaos()`).
@@ -102,9 +109,12 @@ This is deterministic and presenter-controlled, while the failover itself genuin
 - No live provider required for tests (seam patched).
 - Frontend (`vitest`): the new beat renders in the resilience list; the "Gateway failover" lever calls the right endpoint.
 
-## Implementation Risk (verify first)
+## Implementation Risks (verify first)
 
-Capturing `x-tfy-resolved-model` depends on `langchain-openai` surfacing the custom response header via `include_raw=True`. The plan's first task is a tiny probe to confirm. Fallbacks if it does not surface: (a) a thin `httpx` raw call to read the header, or (b) defer the visible readout to feature F (gateway traces). Feature E still functions without the header — it only loses the inline beat.
+The plan opens with a verify-first phase resolving two unknowns cheaply before any build:
+
+1. **Resolved-model header capture** — capturing `x-tfy-resolved-model` depends on `langchain-openai` surfacing the custom response header via `include_raw=True`. A tiny probe confirms. Fallbacks if it does not surface: (a) a thin `httpx` raw call to read the header, or (b) defer the visible readout to feature F (gateway traces). Feature E still functions without the header — it only loses the inline beat.
+2. **Live failover trigger** — probe for a per-request override or per-target disable/mark-unhealthy mechanism on the gateway (see Demo Trigger). Found → single-vm path; not found → two-vm fallback path. Determines whether `chaos_virtual_model` is needed at all.
 
 ## Out of Scope (YAGNI)
 
