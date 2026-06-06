@@ -7,17 +7,19 @@ const ACTIVE = "h-9 px-4 border border-red-500 bg-red-600 text-white hover:bg-re
 const WARN = "h-9 px-4 border border-amber-500 bg-amber-600 text-white hover:bg-amber-500";
 
 export function ChaosControls({
-  state, onLlmMode, onKillTool, onCascade, onClear, busy,
+  state, onLlmMode, onKillTool, onGatewayFailover, onCascade, onClear, busy,
 }: {
   state: SystemState | null;
   onLlmMode: (mode: string) => void;
   onKillTool: () => void;
+  onGatewayFailover: (on: boolean) => void;
   onCascade: () => void;
   onClear: () => void;
   busy: boolean;
 }) {
   const mode = state?.llm_killed ? "fail" : "none";
   const toolActive = (state?.active_chaos?.length ?? 0) > 0;
+  const failoverActive = state?.gateway_failover ?? false;
   const anyChaos = mode !== "none" || toolActive;
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -27,6 +29,10 @@ export function ChaosControls({
       </Button>
       <Button className={IDLE} disabled={busy} onClick={() => onLlmMode("ratelimit")}>
         Rate-limit LLM
+      </Button>
+      <Button className={failoverActive ? WARN : IDLE} disabled={busy}
+              onClick={() => onGatewayFailover(!failoverActive)}>
+        {failoverActive ? "⚡ Gateway rerouting" : "Gateway failover"}
       </Button>
       <Button className={toolActive ? ACTIVE : IDLE} disabled={busy} onClick={onKillTool}>
         {toolActive ? "⚡ Tool failing" : "Kill chart tool"}

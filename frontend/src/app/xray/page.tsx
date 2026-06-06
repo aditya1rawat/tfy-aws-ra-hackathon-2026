@@ -22,6 +22,7 @@ import {
 	resetDemo,
 	seedHero,
 	setChaos,
+	setGatewayFailover,
 	setLlmChaos,
 	setLlmMode
 } from '@/lib/api';
@@ -88,6 +89,12 @@ export default function XrayPage() {
 								}),
 							'Chart tool killed'
 						)}
+						onGatewayFailover={on =>
+							wrap(
+								() => setGatewayFailover(on),
+								on ? 'Gateway failover armed' : 'Gateway failover disarmed'
+							)()
+						}
 						onCascade={wrap(() => applyCascade(), 'Cascade applied')}
 						onClear={wrap(() => clearChaos(), 'Chaos cleared')}
 					/>

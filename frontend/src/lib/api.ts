@@ -113,6 +113,10 @@ export const setLlmMode = (mode: string) =>
   req<{ ok: boolean; mode: string; killed: boolean }>(
     "/chaos/llm", { method: "POST", body: JSON.stringify({ mode }) });
 
+export const setGatewayFailover = (on: boolean) =>
+  req<{ ok: boolean; gateway_failover: boolean }>(
+    "/chaos/llm", { method: "POST", body: JSON.stringify({ gateway_failover: on }) });
+
 export const applyCascade = () =>
   req<{ applied: unknown[] }>("/chaos/scenario/cascade", { method: "POST" });
 
