@@ -160,10 +160,22 @@ Memory **never** touches the deterministic interaction guardrail.
 - **Verify:** `GET /patient/<id>/history` → `{visits, history:[...]}` (returns
   `{visits:0, history:[]}` when HydraDB is down or unconfigured — never 500s).
 
-> Live-verify status: run the two-request flow + the degrade path against the deployed
-> stack after this branch deploys; record the exact panel text + xray state here
-> (mirroring beats 1–8). HydraDB add/recall shape verified live during implementation
-> (facts stored as `infer=false` JSON in `chunk_content`; recall lags ingestion by ~seconds).
+> **Live-verified 2026-06-05** (bridge on main, deploy 02634fb6):
+> - `system/state` → `hydradb: connected`, primary `aws-bedrock/…sonnet-4-6`.
+> - Request 1 (`p_001` + `m_aspirin`, warfarin on chart) → `escalated` ("additive
+>   bleeding risk"); `GET /patient/p_001/history` → `{visits:1, history:[aspirin→escalated]}`.
+> - Request 2 (same) → narrative `clinic_flag` = **"Previously flagged on a prior
+>   visit. Do not auto-approve. additive bleeding risk"**, `returning_patient.visits:1`.
+> - `/xray` latest run nodes = `[recall, intake, redact, load_context, interaction,
+>   finalize]` — `recall` is the entry node; clean run (0 resilience events, no spurious
+>   memory degrade while HydraDB healthy).
+> - **Degrade path:** covered by `test_recall_degrades_on_error_and_records` (recall
+>   raises → `[]` + `memory_degraded` + `layer=memory · degraded` to ResilienceLog,
+>   request still completes). NOT tripped on the deployed app because the only live lever
+>   is overwriting the bridge's injected `HYDRADB_API_KEY` secret (risks losing the real
+>   key). To demo the live degrade: set a deliberately-bad `HYDRADB_API_KEY` on the bridge,
+>   redeploy, submit → `/xray` shows the memory degrade, patient still served; then restore
+>   the real key.
 
 ## Notes
 
