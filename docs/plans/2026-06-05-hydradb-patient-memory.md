@@ -1,6 +1,8 @@
 # HydraDB Patient-Memory Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **STATUS (2026-06-05): IMPLEMENTED + MERGED.** All 13 tasks done via inline execution. PR #11 merged to main (002f27e). Backend 293 passed, frontend 26 passed + build. Bridge redeploying from main; live-verify Beat 9 pending build.
 
 **Goal:** Cross-visit patient memory backed by HydraDB — store each request's terminal outcome, recall prior visits at intake (degrade-safe), feed history into free-text intent parsing + the clinic narrative, surface a "returning patient" panel.
 
