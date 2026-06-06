@@ -26,6 +26,11 @@ class RequestStore:
             "_seq": next(self._seq),
         }
 
+    def clear(self) -> int:
+        n = len(self._records)
+        self._records.clear()
+        return n
+
     def get(self, request_id: str) -> dict:
         return self._records[request_id]  # KeyError → caller maps to 404
 

@@ -37,3 +37,14 @@ def test_list_all_newest_first():
     s = RequestStore()
     s.add("r1", _state()); s.add("r2", {**_state(), "item_id": "r2"})
     assert [r["request_id"] for r in s.list_all()] == ["r2", "r1"]
+
+
+def test_clear_empties_and_returns_count():
+    s = RequestStore()
+    s.add("r1", _state()); s.add("r2", {**_state(), "item_id": "r2"})
+    assert s.clear() == 2
+    assert s.list_all() == []
+
+
+def test_clear_empty_store_returns_zero():
+    assert RequestStore().clear() == 0

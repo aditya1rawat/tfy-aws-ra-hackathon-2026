@@ -177,6 +177,28 @@ Memory **never** touches the deterministic interaction guardrail.
 >   redeploy, submit → `/xray` shows the memory degrade, patient still served; then restore
 >   the real key.
 
+## Driving the recorded take (B3 demo controls)
+
+The `/xray` surface has a **DemoBar**: `[Run hero request] [Seed hero] [Reset demo]`.
+Every operator action (DemoBar + chaos levers) fires a confirmation **toast**.
+
+Loop for each recorded take:
+1. **Seed hero** (DemoBar) → writes `p_001`'s prior aspirin-escalation memory. Wait a
+   few seconds (HydraDB ingestion is async) before recording the returning-patient beat.
+2. **Patient beat:** open `/patient`, submit a request → the timeline **animates
+   node-by-node live** (recall ▸ intake ▸ … ▸ interaction) via the `/interactive` SSE
+   stream, then the persisted outcome + returning-patient context render.
+3. **Operator beat:** `/xray` → **Run hero request** (streams live into the Live-run
+   panel) and trip chaos levers (Kill LLM / Kill chart tool / Cascade / Rate-limit) —
+   each toasts, the Resilience timeline fills.
+4. **Retake:** **Reset demo** → wipes batch + requests + chaos + resilience log and
+   restores the Bedrock primary (LLM mode → none). One click, clean slate.
+
+Each surface streams its own run (separate routes); runs persist server-side, so a
+patient-submitted run also shows on `/xray` (polled) after you cut over. If the SSE
+stream is unavailable, the patient surface falls back to a background submit (toast
+says so) — the run still completes.
+
 ## Notes
 
 - The per-deploy Vercel hash URL is auth-walled (401); the **stable** domain

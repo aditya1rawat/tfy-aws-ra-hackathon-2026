@@ -89,6 +89,12 @@ export const getClinicQueue = () => req<{ items: RequestSummary[] }>("/clinic/qu
 export const getPatientHistory = (patientId: string) =>
   req<{ visits: number; history: HistoryFact[] }>(`/patient/${patientId}/history`);
 
+export const resetDemo = () =>
+  req<{ ok: boolean; cleared: number; requests: number }>("/demo/reset", { method: "POST", body: "{}" });
+
+export const seedHero = () =>
+  req<{ ok: boolean; hero_patient: string }>("/demo/seed_hero", { method: "POST", body: "{}" });
+
 export const clinicAction = (b: { request_id: string; action: string; note?: string }) =>
   req<{ ok: boolean; new_status: string }>("/clinic/action", { method: "POST", body: JSON.stringify(b) });
 
