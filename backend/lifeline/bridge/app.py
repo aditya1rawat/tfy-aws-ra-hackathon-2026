@@ -332,6 +332,14 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
     def patient_requests(patient_id: str) -> dict:
         return {"requests": [_summary(r) for r in request_store.list_by_patient(patient_id)]}
 
+    @app.get("/patient/{patient_id}/history")
+    def patient_history(patient_id: str) -> dict:
+        try:  # recall is degrade-safe: HydraDB down → empty history, never 500
+            facts = deps.memory.recall(patient_id)
+        except Exception:
+            facts = []
+        return {"visits": len(facts), "history": facts}
+
     @app.get("/clinic/queue")
     def clinic_queue() -> dict:
         return {"items": [_summary(r) for r in request_store.list_all()]}
@@ -416,6 +424,17 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
     return app
 
 
+def _select_memory(settings: Settings):
+    """HydraDB-backed patient memory when configured, else a no-op store."""
+    from lifeline.agent.memory import HydraMemoryStore, NullMemoryStore
+    key = os.environ.get("HYDRADB_API_KEY", "")
+    tenant = os.environ.get("HYDRADB_TENANT_ID", "")
+    if key and tenant:
+        client = HydraDBClient(key, tenant, os.environ.get("HYDRADB_SUB_TENANT_ID", ""))
+        return HydraMemoryStore(client)
+    return NullMemoryStore()
+
+
 def _select_guardrail(settings: Settings):
     """Live: call the deployed guardrail over HTTP. Offline: in-process engine."""
     if settings.use_tf:
@@ -463,6 +482,8 @@ def _default_app() -> FastAPI:
         tools=ToolGateway(_select_backend(settings), audit=audit, rlog=rlog, run_id_get=get_run),
         guardrail=_select_guardrail(settings),
         audit=audit,
+        memory=_select_memory(settings),
+        rlog=rlog,
     )
     store = make_job_store(settings)
     checkpointer = make_checkpointer(settings)
