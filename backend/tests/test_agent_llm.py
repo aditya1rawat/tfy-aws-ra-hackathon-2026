@@ -96,3 +96,68 @@ def test_tf_gateway_captures_resolved_model(monkeypatch):
     out = llm.parse_intent("patient p_001 refill m_aspirin")
     assert out.med_id == "m_aspirin"
     assert llm.last_resolved_model == "bedrock-main/claude-haiku-4-5"
+
+
+# --- GatewayRouterLLM + gateway-chaos lever -------------------------------
+
+from lifeline.agent.llm import (  # noqa: E402
+    GatewayRouterLLM, set_gateway_chaos, is_gateway_chaos,
+)
+
+
+class _StubGateway:
+    def __init__(self, name, resolved):
+        self.name = name
+        self.last_resolved_model = resolved
+        self.calls = 0
+
+    def parse_intent(self, text, *, history=""):
+        self.calls += 1
+        return Intent(patient_id="p_001", request_type="refill", med_id="m_aspirin")
+
+
+class _RecordingRlog:
+    def __init__(self):
+        self.events = []
+
+    def record(self, run_id, **kw):
+        self.events.append(kw)
+
+
+def teardown_function():
+    set_gateway_chaos(False)
+
+
+def test_router_records_failover_beat_when_resolved_differs():
+    healthy = _StubGateway("lifeline/resilient-chat", "bedrock-main/claude-haiku-4-5")
+    rlog = _RecordingRlog()
+    router = GatewayRouterLLM(healthy, chaos=None,
+                             primary_target="bedrock-main/claude-sonnet-4-6",
+                             rlog=rlog, run_id_get=lambda: "run1")
+    router.parse_intent("patient p_001 refill m_aspirin")
+    beats = [e for e in rlog.events if e.get("mode") == "gateway-failover"]
+    assert len(beats) == 1
+    assert beats[0]["recovered_by"] == "bedrock-main/claude-haiku-4-5"
+    assert beats[0]["outcome"] == "recovered"
+
+
+def test_router_no_beat_when_primary_served():
+    healthy = _StubGateway("lifeline/resilient-chat", "bedrock-main/claude-sonnet-4-6")
+    rlog = _RecordingRlog()
+    router = GatewayRouterLLM(healthy, chaos=None,
+                             primary_target="bedrock-main/claude-sonnet-4-6",
+                             rlog=rlog, run_id_get=lambda: "run1")
+    router.parse_intent("patient p_001 refill m_aspirin")
+    assert not [e for e in rlog.events if e.get("mode") == "gateway-failover"]
+
+
+def test_router_uses_chaos_client_when_flag_set():
+    healthy = _StubGateway("vm", "bedrock-main/claude-sonnet-4-6")
+    chaos = _StubGateway("vm-chaos", "bedrock-main/claude-haiku-4-5")
+    router = GatewayRouterLLM(healthy, chaos=chaos,
+                             primary_target="bedrock-main/claude-sonnet-4-6",
+                             rlog=None, run_id_get=lambda: None)
+    set_gateway_chaos(True)
+    assert is_gateway_chaos() is True
+    router.parse_intent("patient p_001 refill m_aspirin")
+    assert chaos.calls == 1 and healthy.calls == 0
