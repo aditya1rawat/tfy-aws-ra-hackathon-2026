@@ -1,4 +1,4 @@
-from lifeline.agent.llm import ChaosLLM, ResilientLLM
+from lifeline.agent.llm import ChaosLLM, GatewayRouterLLM, PatternLLM, ResilientLLM
 from lifeline.agent.tools import InProcessBackend, MCPBackend
 from lifeline.bridge.app import _select_backend, _select_llm
 from lifeline.config import Settings
@@ -8,6 +8,7 @@ def _settings(mcp_gateway_url: str = "", api_key: str = "", use_tf: bool = False
     return Settings(
         use_tf=use_tf, gateway_base_url="https://gw/openai", api_key=api_key,
         primary_model="anthropic/claude-sonnet-4-6", fallback_model="anthropic/claude-haiku-4-5",
+        virtual_model="anthropic/claude-sonnet-4-6", chaos_virtual_model="",
         guardrail_url="", checkpoint_db_path="", mcp_gateway_url=mcp_gateway_url,
     )
 
@@ -35,5 +36,9 @@ def test_select_llm_offline_is_resilient_chaos_wrapped():
 def test_select_llm_resilient_when_use_tf():
     llm = _select_llm(_settings(use_tf=True, api_key="tfy-token"))
     assert isinstance(llm, ResilientLLM)
-    # primary then fallback, by configured model name
-    assert [c.name for c in llm._clients] == ["anthropic/claude-sonnet-4-6", "anthropic/claude-haiku-4-5"]
+    # Hybrid split: gateway owns model->model failover behind the virtual model,
+    # the app keeps a deterministic offline degrade tail.
+    assert isinstance(llm._clients[0], ChaosLLM)
+    assert isinstance(llm._clients[0]._inner, GatewayRouterLLM)
+    assert llm._clients[0].name == "anthropic/claude-sonnet-4-6"  # the virtual model
+    assert isinstance(llm._clients[-1], PatternLLM)

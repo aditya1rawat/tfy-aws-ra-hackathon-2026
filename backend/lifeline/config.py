@@ -17,6 +17,8 @@ class Settings:
     api_key: str
     primary_model: str
     fallback_model: str
+    virtual_model: str
+    chaos_virtual_model: str
     guardrail_url: str
     checkpoint_db_path: str
     mcp_gateway_url: str
@@ -35,6 +37,11 @@ def get_settings() -> Settings:
         api_key=os.environ.get("TF_API_KEY", ""),
         primary_model=os.environ.get("TF_PRIMARY_MODEL", "bedrock-main/anthropic.claude-3-5-sonnet"),
         fallback_model=os.environ.get("TF_FALLBACK_MODEL", "bedrock-main/meta.llama3-1-8b"),
+        # Virtual model owns model->model failover at the gateway; defaults to the
+        # primary model so unconfigured environments behave as before.
+        virtual_model=os.environ.get("TF_VIRTUAL_MODEL", "")
+        or os.environ.get("TF_PRIMARY_MODEL", "bedrock-main/anthropic.claude-3-5-sonnet"),
+        chaos_virtual_model=os.environ.get("TF_CHAOS_VIRTUAL_MODEL", ""),
         guardrail_url=os.environ.get("GUARDRAIL_URL", "http://127.0.0.1:8010"),
         checkpoint_db_path=os.environ.get("CHECKPOINT_DB_PATH", "lifeline_checkpoints.db"),
         # When set, the bridge routes tool calls through this MCP gateway URL

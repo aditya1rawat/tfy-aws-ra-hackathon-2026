@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from lifeline.agent.llm import get_llm_mode, set_llm_mode
+from lifeline.agent.llm import get_llm_mode, is_gateway_chaos, set_gateway_chaos, set_llm_mode
 from lifeline.bridge.app import _default_app
 from lifeline.chaos.controller import controller
 
@@ -15,6 +15,7 @@ def test_demo_reset_clears_everything():
     c.post("/patient/request", json={"patient_id": "p_001", "med_id": "m_aspirin", "request_type": "refill"})
     controller.set("chart", "get_patient_chart", mode="fail", latency_s=0.0)
     set_llm_mode("fail")
+    set_gateway_chaos(True)
 
     r = c.post("/demo/reset")
     assert r.status_code == 200
@@ -24,6 +25,7 @@ def test_demo_reset_clears_everything():
     assert c.get("/clinic/queue").json()["items"] == []
     assert c.get("/chaos/state").json()["active"] == []
     assert get_llm_mode() == "none"
+    assert is_gateway_chaos() is False
 
 
 def test_demo_reset_idempotent_on_empty():

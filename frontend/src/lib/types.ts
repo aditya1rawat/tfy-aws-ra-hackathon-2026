@@ -87,6 +87,7 @@ export interface SystemState {
   primary_model: string;
   active_model: string;
   llm_killed: boolean;
+  gateway_failover?: boolean;
   active_chaos: ChaosEntry[];
 }
 

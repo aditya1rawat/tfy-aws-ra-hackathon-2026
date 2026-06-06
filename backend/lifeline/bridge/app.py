@@ -14,8 +14,8 @@ from pydantic import BaseModel
 from lifeline.agent.deps import Deps
 from lifeline.agent.guardrails import HttpInteractionGuardrail, InProcessInteractionGuardrail
 from lifeline.agent.llm import (
-    ChaosLLM, FakeLLM, Intent, PatternLLM, ResilientLLM, TFGatewayLLM,
-    get_llm_mode, is_llm_killed, set_llm_killed, set_llm_mode,
+    ChaosLLM, FakeLLM, GatewayRouterLLM, Intent, PatternLLM, ResilientLLM, TFGatewayLLM,
+    get_llm_mode, is_gateway_chaos, is_llm_killed, set_gateway_chaos, set_llm_killed, set_llm_mode,
 )
 from lifeline.resilience.context import get_run
 from lifeline.resilience.log import ResilienceLog
@@ -106,6 +106,7 @@ class ClinicAction(BaseModel):
 class LlmChaos(BaseModel):
     killed: bool | None = None
     mode: str | None = None     # none | fail | ratelimit | slow
+    gateway_failover: bool | None = None   # arm gateway-native model reroute
 
 
 _ACTION_STATUS = {"approve_alternative": "done", "override": "done", "reject": "failed"}
@@ -251,6 +252,7 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
         rlog.clear()
         controller.clear_all()
         set_llm_mode("none")
+        set_gateway_chaos(False)
         return {"ok": True, "cleared": cleared, "requests": requests}
 
     @app.post("/demo/seed_hero")
@@ -397,6 +399,7 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
             "primary_model": app.state.primary_model,
             "active_model": active_model,
             "llm_killed": killed,
+            "gateway_failover": is_gateway_chaos(),
             "active_chaos": active,
             "hydradb": app.state.hydradb.health(),
         }
@@ -414,7 +417,13 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
                 audit.record("llm", "primary_model", False, error="chaos: LLM provider killed")
             else:
                 audit.record("llm", "primary_model", True, error="LLM provider restored")
-        return {"ok": True, "mode": get_llm_mode(), "killed": is_llm_killed()}
+        if req.gateway_failover is not None:
+            set_gateway_chaos(req.gateway_failover)
+            audit.record("llm", "gateway_failover", not req.gateway_failover,
+                         error="chaos: gateway failover armed" if req.gateway_failover
+                         else "gateway failover disarmed")
+        return {"ok": True, "mode": get_llm_mode(), "killed": is_llm_killed(),
+                "gateway_failover": is_gateway_chaos()}
 
     def _resilience_summary(run_id: str) -> dict:
         ev = rlog.by_run(run_id)
@@ -480,18 +489,27 @@ def _select_backend(settings: Settings):
 
 
 def _select_llm(settings: Settings, rlog: ResilienceLog | None = None):
-    """Primary (chaos-wrappable) → fallback, in both modes.
+    """Hybrid split: the gateway owns model→model failover (one virtual model);
+    the app keeps retry + degrade-to-offline (PatternLLM).
 
-    Live: ChaosLLM(Sonnet) → Haiku via the TF gateway. Offline: ChaosLLM over
-    deterministic PatternLLMs named to mimic the gateway models, so the
-    model-fallback beat is demoable without a live provider.
+    Live: ChaosLLM(GatewayRouterLLM(virtual model, chaos virtual model)) → PatternLLM.
+    The virtual model reroutes sonnet→haiku→anthropic inside the gateway; the
+    router records a gateway-failover beat when the resolved model differs from
+    the primary. A full-gateway outage still degrades to the offline parser.
+    Offline: ChaosLLM over deterministic PatternLLMs, so the app-layer
+    model-fallback beat stays demoable without a live provider.
     """
     if settings.use_tf:
-        primary = TFGatewayLLM(settings.gateway_base_url, settings.api_key, settings.primary_model)
-        fallback = TFGatewayLLM(settings.gateway_base_url, settings.api_key, settings.fallback_model)
-    else:
-        primary = PatternLLM(name="sonnet-sim")
-        fallback = PatternLLM(name="haiku-sim")
+        healthy = TFGatewayLLM(settings.gateway_base_url, settings.api_key, settings.virtual_model)
+        chaos = (TFGatewayLLM(settings.gateway_base_url, settings.api_key, settings.chaos_virtual_model)
+                 if settings.chaos_virtual_model else None)
+        gateway = GatewayRouterLLM(healthy, chaos=chaos,
+                                   primary_target=settings.primary_model,
+                                   rlog=rlog, run_id_get=get_run)
+        offline = PatternLLM(name="offline-sim")
+        return ResilientLLM([ChaosLLM(gateway), offline], rlog=rlog, run_id_get=get_run)
+    primary = PatternLLM(name="sonnet-sim")
+    fallback = PatternLLM(name="haiku-sim")
     return ResilientLLM([ChaosLLM(primary), fallback], rlog=rlog, run_id_get=get_run)
 
 

@@ -129,25 +129,40 @@ def _build_chat_model(base_url: str, api_key: str, model: str):
     """Seam: build a LangChain chat model bound to the TF gateway. Patched in tests."""
     from langchain_openai import ChatOpenAI
 
-    return ChatOpenAI(base_url=base_url, api_key=api_key, model=model, temperature=0)
+    return ChatOpenAI(base_url=base_url, api_key=api_key, model=model,
+                      temperature=0, include_response_headers=True)
 
 
 class TFGatewayLLM:
-    """OpenAI-compatible client pointed at the TrueFoundry AI Gateway."""
+    """OpenAI-compatible client pointed at the TrueFoundry AI Gateway.
+
+    Captures the gateway's resolved (served) model so a gateway-internal failover
+    — the virtual model rerouting to a fallback target — is observable to the app.
+    The gateway reports the served model in the standard ``model_name`` response
+    metadata (verified live); ``x-tfy-resolved-model`` is a secondary fallback.
+    """
 
     def __init__(self, base_url: str, api_key: str, model: str):
         self.name = model
+        self.last_resolved_model: str | None = None
         chat = _build_chat_model(base_url, api_key, model)
-        self._structured = chat.with_structured_output(Intent)
+        self._structured = chat.with_structured_output(Intent, include_raw=True)
 
     def parse_intent(self, text: str, *, history: str = "") -> Intent:
         prompt = _INTENT_PROMPT.format(text=text)
         if history:
             prompt = f"Prior visits for this patient: {history}\n\n{prompt}"
         try:
-            return self._structured.invoke(prompt)
+            result = self._structured.invoke(prompt)
         except Exception as err:  # network/429/provider error → uniform signal for ResilientLLM
             raise LLMUnavailable(f"{self.name}: {err}") from err
+        raw = result.get("raw")
+        meta = getattr(raw, "response_metadata", {}) or {}
+        self.last_resolved_model = (
+            meta.get("model_name")
+            or (meta.get("headers") or {}).get("x-tfy-resolved-model")
+        )
+        return result["parsed"]
 
 
 # --- App-level LLM chaos lever (demo: force the primary model to misbehave) ---
@@ -196,3 +211,49 @@ class ChaosLLM:
         if mode == "slow":
             _time.sleep(_LLM_SLOW_S)
         return self._inner.parse_intent(text, history=history)
+
+
+# --- Gateway-failover demo lever (route through the chaos virtual model) ---
+_gateway_chaos = {"on": False}
+
+
+def set_gateway_chaos(on: bool) -> None:
+    """Toggle the gateway-failover demo: route through the chaos virtual model."""
+    _gateway_chaos["on"] = bool(on)
+
+
+def is_gateway_chaos() -> bool:
+    return _gateway_chaos["on"]
+
+
+class GatewayRouterLLM:
+    """Front the gateway client(s). Picks the chaos virtual model when the
+    gateway-chaos flag is set, then inspects ``last_resolved_model``: if the
+    gateway rerouted away from the primary target, record a ``gateway-failover``
+    beat so the x-ray shows the platform-native failover.
+
+    Two-vm path: ``chaos`` is a second TFGatewayLLM bound to the chaos virtual
+    model. Single-vm path: pass ``chaos=None`` and have the flag set a
+    per-request override on ``healthy`` instead — the beat logic is unchanged.
+    """
+
+    def __init__(self, healthy, chaos=None, *, primary_target: str,
+                 rlog=None, run_id_get=None):
+        self._healthy = healthy
+        self._chaos = chaos
+        self._primary_target = primary_target
+        self._rlog = rlog
+        self._run_id_get = run_id_get or (lambda: None)
+        self.name = healthy.name
+        self.last_resolved_model: str | None = None
+
+    def parse_intent(self, text: str, *, history: str = "") -> Intent:
+        client = self._chaos if (is_gateway_chaos() and self._chaos is not None) else self._healthy
+        out = client.parse_intent(text, history=history)
+        resolved = getattr(client, "last_resolved_model", None)
+        self.last_resolved_model = resolved
+        if resolved and resolved != self._primary_target and self._rlog is not None:
+            self._rlog.record(self._run_id_get(), layer="llm", target="gateway",
+                              attempt=1, mode="gateway-failover", backoff_ms=0,
+                              outcome="recovered", recovered_by=resolved)
+        return out
