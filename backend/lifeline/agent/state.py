@@ -31,6 +31,8 @@ class ItemState(TypedDict, total=False):
     cost: float
     error: str | None
     audit: Annotated[list, operator.add]
+    patient_history: list      # prior facts recalled at intake ([] if none/degraded)
+    memory_degraded: bool      # True when recall failed → history unavailable
 
 
 def new_state(*, item_id: str, patient_id: str, request_type: str, med_id: str,
@@ -53,4 +55,6 @@ def new_state(*, item_id: str, patient_id: str, request_type: str, med_id: str,
         "cost": 0.0,
         "error": None,
         "audit": [],
+        "patient_history": [],
+        "memory_degraded": False,
     }

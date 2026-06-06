@@ -5,6 +5,7 @@ import { AgentSummary } from "@/components/clinic/AgentSummary";
 import { ClinicShell } from "@/components/clinic/ClinicShell";
 import { ClinicStats } from "@/components/clinic/ClinicStats";
 import { RequestQueue } from "@/components/clinic/RequestQueue";
+import { ReturningPatientPanel } from "@/components/clinic/ReturningPatientPanel";
 import { SystemStrip } from "@/components/clinic/SystemStrip";
 import { useLive } from "@/hooks/useLive";
 import { clinicAction, getClinicQueue, getSystemState } from "@/lib/api";
@@ -60,7 +61,10 @@ export default function ClinicPage() {
           {/* Detail + side rail */}
           <div className="space-y-6 lg:col-span-2">
             {current ? (
-              <AgentSummary item={current} onAction={onAction} busy={busy} />
+              <>
+                <ReturningPatientPanel data={current.narrative.returning_patient ?? null} />
+                <AgentSummary item={current} onAction={onAction} busy={busy} />
+              </>
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-400">
                 No requests in the queue yet. Submit one from the patient app to see it triaged here.

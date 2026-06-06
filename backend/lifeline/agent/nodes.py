@@ -1,8 +1,11 @@
+import time
+
 from lifeline.agent.deps import Deps, decide_action
 from lifeline.agent.guardrails import redact_phi, validate_output
 from lifeline.agent.llm import Intent, LLMUnavailable
 from lifeline.agent.state import ItemState, Status
 from lifeline.agent.tools import ToolUnavailable
+from lifeline.resilience.context import get_run
 
 # expected output keys per action, used by the validate node
 _EXPECTED = {
@@ -16,11 +19,41 @@ def _audit(node: str, detail: str) -> dict:
     return {"node": node, "detail": detail}
 
 
+def recall(state: ItemState, *, deps: Deps) -> dict:
+    """Recall prior visits for this patient. Degrade-safe pipeline entry node.
+
+    HydraDB failure → empty history + memory_degraded, recorded to ResilienceLog.
+    Never changes status; the pipeline proceeds with whatever history it has.
+    """
+    if deps.memory is None:
+        return {"patient_history": [], "memory_degraded": False,
+                "current_node": "recall",
+                "audit": [_audit("recall", "no memory store")]}
+    try:
+        hist = deps.memory.recall(state["patient_id"])
+    except Exception as err:  # HydraDB down/slow → serve without history
+        if deps.rlog is not None:
+            deps.rlog.record(get_run(), layer="memory", target="hydradb",
+                             attempt=1, mode="unavailable", backoff_ms=0,
+                             outcome="degraded")
+        return {"patient_history": [], "memory_degraded": True,
+                "current_node": "recall",
+                "audit": [_audit("recall", f"memory unavailable → no history ({err})")]}
+    return {"patient_history": hist, "memory_degraded": False,
+            "current_node": "recall",
+            "audit": [_audit("recall", f"recalled {len(hist)} prior visit(s)")]}
+
+
 def intake(state: ItemState, *, deps: Deps) -> dict:
     """Resolve the request into a structured Intent (LLM only for free text)."""
     if state.get("raw_text"):
+        hist = state.get("patient_history") or []
+        history = "; ".join(
+            f"{f.get('request_type', '?')} {f.get('med', '?')} → {f.get('outcome', '?')}"
+            for f in hist
+        )
         try:
-            intent = deps.llm.parse_intent(state["raw_text"])
+            intent = deps.llm.parse_intent(state["raw_text"], history=history)
         except LLMUnavailable as err:
             if deps.audit is not None:
                 deps.audit.record("llm", deps.llm.name, False, error=str(err))
@@ -148,9 +181,20 @@ def validate(state: ItemState, *, deps: Deps) -> dict:
 
 
 def finalize(state: ItemState, *, deps: Deps) -> dict:
-    """Terminal node: record final status (defaults to done if still in progress)."""
+    """Terminal node: record final status; best-effort write to patient memory."""
     status = state["status"]
     if status not in Status.TERMINAL:
         status = Status.DONE
+    if deps.memory is not None:
+        try:  # best-effort; a memory write must never disrupt the terminal node
+            deps.memory.write(state["patient_id"], {
+                "med": state.get("med_id"),
+                "request_type": state.get("request_type"),
+                "outcome": status,
+                "reason": state.get("error") or "",
+                "ts": time.time(),
+            })
+        except Exception:
+            pass
     return {"status": status, "current_node": "finalize",
             "audit": [_audit("finalize", f"terminal={status}")]}

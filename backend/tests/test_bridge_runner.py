@@ -38,7 +38,8 @@ def test_run_sync_returns_terminal_state():
 def test_stream_emits_node_events_in_order():
     events = list(_runner().stream(_state(), thread_id="t2"))
     nodes = [e["node"] for e in events]
-    assert nodes[0] == "intake"
+    assert nodes[0] == "recall"
+    assert "intake" in nodes
     assert "interaction" in nodes
     assert nodes[-1] == "finalize"
 
