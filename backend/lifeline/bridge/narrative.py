@@ -58,6 +58,14 @@ def _suggested_alternative(state: dict) -> dict | None:
     return None
 
 
+def _returning_patient(state: dict) -> dict | None:
+    hist = state.get("patient_history") or []
+    if not hist:
+        return None
+    last_ts = max((f.get("ts") or 0) for f in hist)
+    return {"visits": len(hist), "last_ts": last_ts, "history": hist}
+
+
 def _status(state: dict, decision: str | None) -> str:
     if decision == "reject":
         return "rejected"
@@ -102,6 +110,13 @@ def humanize(state: dict, *, decision: str | None, primary_model: str) -> dict:
     clinic_flag = None
     if blocked and status not in ("approved", "rejected"):
         clinic_flag = f"Do not auto-approve. {state.get('error') or 'Interaction flagged.'}"
+    returning = _returning_patient(state)
+    prior_escalated = any(
+        f.get("med") == state.get("med_id") and f.get("outcome") == "escalated"
+        for f in (state.get("patient_history") or [])
+    )
+    if prior_escalated:
+        clinic_flag = "Previously flagged on a prior visit. " + (clinic_flag or "Review recommended.")
     return {
         "status": status,
         "degraded": degraded,
@@ -110,4 +125,5 @@ def humanize(state: dict, *, decision: str | None, primary_model: str) -> dict:
         "patient_message": _patient_message(status, degraded, alt),
         "clinic_flag": clinic_flag,
         "suggested_alternative": alt,
+        "returning_patient": returning,
     }
