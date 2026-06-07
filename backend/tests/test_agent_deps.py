@@ -28,4 +28,6 @@ def test_local_deps_builds_inprocess_stack():
     assert isinstance(deps, Deps)
     rec = deps.tools.call("chart", "get_patient_chart", patient_id="p_001")
     assert rec["patient_id"] == "p_001"
-    assert deps.guardrail.check(["m_warfarin"], "m_ibuprofen")["decision"] == "block"
+    verdict = deps.tools.call("interactions", "check_interaction",
+                              existing_meds=["m_warfarin"], proposed_med="m_ibuprofen")
+    assert verdict["decision"] == "block"

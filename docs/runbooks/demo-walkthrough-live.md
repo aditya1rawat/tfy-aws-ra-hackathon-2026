@@ -259,6 +259,45 @@ lever). Cleared by `/demo/reset`; surfaced in `/system/state` as `dose_hallucina
 > armed → `escalated` + `guardrail · dosage · dosage-block · blocked`; reset clears. Live TFY
 > output-guardrail attachment (`/guardrails/dosage`) + deployed-bridge smoke pending (Phase 0).
 
+---
+
+## Drug-interaction MCP server (MCP Gateway: scoped tools + degrade)
+
+The drug-interaction check is now a **scoped MCP tool** (`mcp_servers/interactions.py`,
+`interactions_check_interaction`) served through the TFY MCP Gateway, alongside chart / formulary
+/ insurer / benefits / pharmacy. The `interaction` node calls it via `ToolGateway` (retry / audit
+/ degrade) instead of an in-app guardrail. Same deterministic engine (`interactions.json`); the
+old in-app `/check` HTTP path (`HttpInteractionGuardrail` + `guardrail/server.py` + `GUARDRAIL_URL`)
+was **removed** — this also retires the `:8010 /check` confusion noted under the dosage guardrail.
+
+Two outcomes:
+- **Interaction found** → escalate (the existing safety block, Beat 3 — unchanged).
+- **Service down** → `ToolGateway` exhausts retries → escalate **"flag for pharmacist"**
+  (fail-closed, patient still served) + a `tool · interactions.check_interaction · degraded` beat.
+
+The **Kill interaction check** `/xray` pill arms `chaos.set("interactions","check_interaction","fail")`
+(`setChaos`). Cleared by **Clear chaos** / `/demo/reset`.
+
+### Beat 12 — Interaction service down → flag for pharmacist (MCP Gateway: degrade)
+- **Do:** `/xray` → **Kill interaction check**, submit a `p_001` aspirin refill.
+- **Result:** the interactions MCP tool fails its retries; the run escalates "flag for pharmacist"
+  (never auto-approved), `/xray` records `tool · interactions.check_interaction · degraded`, and
+  the clinic queue shows "Flag for pharmacist — interaction check unavailable."
+- **vs Beat 2 (Kill chart tool):** chart down → request *queues* (retry-later); interaction service
+  down → request *escalates to a human* (fail-closed safety). Two principled degrade behaviors on
+  the same MCP Gateway.
+- **Found path:** lever off → aspirin-on-warfarin interaction **found** → escalate with the
+  acetaminophen alternative (Beat 3).
+- **Verify:** `POST /chaos/set {"server":"interactions","tool":"check_interaction","mode":"fail"}`
+  → `POST /patient/request` (p_001, m_aspirin, refill) → `GET /xray/resilience` shows the degraded
+  beat.
+
+> **Local-verified 2026-06-06** (in-process MCP backend): found run → `escalated` at the
+> interaction node (Beat 3); **Kill interaction check** → retries fail → `escalated` "flag for
+> pharmacist" + `tool · interactions.check_interaction · degraded` beat; reset clears. The
+> interaction check no longer needs the `:8010 /check` server. Live MCP-Gateway registration of the
+> `interactions` tool + deployed smoke pending.
+
 ## Driving the recorded take (B3 demo controls)
 
 The `/xray` surface has a **DemoBar**: `[Run hero request] [Seed hero] [Reset demo]`.

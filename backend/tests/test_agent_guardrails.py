@@ -1,5 +1,5 @@
 from lifeline.agent.guardrails import (
-    HttpInteractionGuardrail, InProcessInteractionGuardrail, redact_phi, validate_output,
+    InProcessInteractionGuardrail, redact_phi, validate_output,
 )
 
 
@@ -35,23 +35,3 @@ def test_inprocess_guardrail_allows_safe_combo():
     out = g.check(["m_metformin"], "m_atorvastatin")
     assert out["decision"] == "allow"
     assert out["violations"] == []
-
-
-def test_http_guardrail_uses_check_endpoint(monkeypatch):
-    captured = {}
-
-    class _Resp:
-        def raise_for_status(self): ...
-        def json(self):
-            return {"decision": "block", "violations": [{"severity": "severe"}], "reason": "bleeding"}
-
-    def _fake_post(url, json, timeout):
-        captured.update(url=url, json=json)
-        return _Resp()
-
-    monkeypatch.setattr("lifeline.agent.guardrails.httpx.post", _fake_post)
-    g = HttpInteractionGuardrail("http://127.0.0.1:8010")
-    out = g.check(["m_warfarin"], "m_ibuprofen")
-    assert out["decision"] == "block"
-    assert captured["url"] == "http://127.0.0.1:8010/check"
-    assert captured["json"] == {"existing_meds": ["m_warfarin"], "proposed_med": "m_ibuprofen"}

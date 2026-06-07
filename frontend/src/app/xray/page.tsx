@@ -104,6 +104,15 @@ export default function XrayPage() {
 								}),
 							'Chart tool killed'
 						)}
+						onKillInteraction={wrap(
+							() =>
+								setChaos({
+									server: 'interactions',
+									tool: 'check_interaction',
+									mode: 'fail'
+								}),
+							'Interaction check killed'
+						)}
 						onGatewayFailover={on =>
 							wrap(
 								() => setGatewayFailover(on),

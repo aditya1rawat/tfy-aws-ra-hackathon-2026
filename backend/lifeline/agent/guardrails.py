@@ -1,7 +1,5 @@
 import re
 
-import httpx
-
 from lifeline.data import load_fixture
 from lifeline.guardrail.interactions import build_alias_index, check_interactions
 
@@ -40,19 +38,3 @@ class InProcessInteractionGuardrail:
 
     def check(self, existing_meds: list[str], proposed_med: str) -> dict:
         return _verdict(existing_meds, proposed_med)
-
-
-class HttpInteractionGuardrail:
-    """Call the Plan 1 `/check` guardrail server over HTTP."""
-
-    def __init__(self, base_url: str):
-        self._base_url = base_url.rstrip("/")
-
-    def check(self, existing_meds: list[str], proposed_med: str) -> dict:
-        resp = httpx.post(
-            f"{self._base_url}/check",
-            json={"existing_meds": existing_meds, "proposed_med": proposed_med},
-            timeout=5.0,
-        )
-        resp.raise_for_status()
-        return resp.json()
