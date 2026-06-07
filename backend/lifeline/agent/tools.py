@@ -4,7 +4,7 @@ from typing import Callable
 
 from lifeline.chaos.controller import RateLimited, ToolFailure, ToolTimeout, guard
 from lifeline.resilience.timeout import CallTimeout, call_with_timeout
-from lifeline.mcp_servers import benefits, chart, formulary, insurer, pharmacy
+from lifeline.mcp_servers import benefits, chart, formulary, insurer, interactions, pharmacy
 
 
 class ToolUnavailable(Exception):
@@ -21,6 +21,7 @@ class InProcessBackend:
         self._registry: dict[tuple[str, str], Callable] = {
             ("chart", "get_patient_chart"): chart.get_patient_chart,
             ("chart", "get_med_history"): chart.get_med_history,
+            ("interactions", "check_interaction"): interactions.check_interaction,
             ("formulary", "check_coverage"): formulary.check_coverage,
             ("formulary", "needs_prior_auth"): formulary.needs_prior_auth,
             ("insurer", "submit_prior_auth"): insurer.submit_prior_auth,

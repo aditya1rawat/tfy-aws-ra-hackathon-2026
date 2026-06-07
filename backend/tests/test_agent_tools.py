@@ -54,3 +54,10 @@ def test_transient_failure_then_success(monkeypatch):
     out = gw.call("pharmacy", "approve_refill", patient_id="p_001", med_id="m_warfarin")
     assert out["status"] == "approved"
     assert calls["n"] == 2  # failed once, succeeded on retry
+
+
+def test_interactions_tool_resolves_in_inprocess_backend():
+    from lifeline.agent.tools import InProcessBackend
+    out = InProcessBackend().invoke("interactions", "check_interaction",
+                                    {"existing_meds": ["m_warfarin"], "proposed_med": "m_aspirin"})
+    assert out["decision"] == "block"

@@ -6,10 +6,10 @@ the TF MCP Gateway registers a virtual MCP pointing here.
 """
 from fastmcp import FastMCP
 
-from lifeline.mcp_servers import benefits, chart, formulary, insurer, pharmacy
+from lifeline.mcp_servers import benefits, chart, formulary, insurer, interactions, pharmacy
 
 mcp = FastMCP("lifeline-tools")
-for module in (chart, formulary, insurer, benefits, pharmacy):
+for module in (chart, formulary, insurer, benefits, pharmacy, interactions):
     mcp.mount(module.mcp, namespace=module.SERVER)
 
 
