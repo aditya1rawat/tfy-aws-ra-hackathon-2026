@@ -299,6 +299,30 @@ The **Kill interaction check** `/xray` pill arms `chaos.set("interactions","chec
 > `:8010 /check` server. Still pending: live MCP-Gateway registration of the `interactions` tool
 > (the in-process backend serves it live until then).
 
+---
+
+## Live gateway traces (AI Monitoring)
+
+Every gateway LLM call (intake intent-parse + the dosage `draft`) is captured inline from the
+response: resolved **model**, **prompt/completion tokens**, measured **latency**, estimated **cost**
+(per-model price table), and the **request-id**. A `TelemetryLog` keys each call to its run. Surfaced
+two ways in `/xray`: a **Gateway telemetry** panel (live feed of recent calls) and a per-run **TRACE**
+line in the event stream — each with a **View trace ↗** deep-link into TFY Monitoring.
+
+- **Source:** the gateway response we already receive (no separate metrics API). Best-effort — a
+  telemetry miss never affects the run; latency is always recorded, tokens/cost/url degrade to `null`.
+- **Offline:** the `PatternLLM`/`TemplatedDrafter` path records nothing → panel shows "No live gateway
+  calls yet". Real telemetry needs `USE_TF=true` (live bridge).
+- **Deep-link:** set `TF_TRACE_BASE_URL` on the bridge to the console trace URL prefix; `trace_url` =
+  `<base>/<request-id>`. Request-id prefers a gateway header (`x-tfy-request-id`/`x-request-id`/…),
+  falling back to the langchain run id. With no base set, `trace_url` is `null` and the link hides.
+
+> **Local-verified 2026-06-07** (live gateway, `USE_TF=true`): a lisinopril refill captured a real
+> call — `model: aws-bedrock/global.anthropic.claude-sonnet-4-6`, 353+92 tokens, 5291ms, **cost
+> $0.002439**; `/xray/runs` carries the per-run `telemetry`; `/demo/reset` clears it. **Pending:** set
+> `TF_TRACE_BASE_URL` on the deployed bridge + confirm the captured request-id resolves in the TFY
+> Monitoring console (Phase 0 step 2) so **View trace ↗** lands on the right trace.
+
 ## Driving the recorded take (B3 demo controls)
 
 The `/xray` surface has a **DemoBar**: `[Run hero request] [Seed hero] [Reset demo]`.
