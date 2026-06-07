@@ -1,10 +1,10 @@
 [
-  {"med_id": "m_warfarin", "generic_name": "warfarin", "brand_names": ["Coumadin", "Jantoven"]},
-  {"med_id": "m_ibuprofen", "generic_name": "ibuprofen", "brand_names": ["Advil", "Motrin"]},
-  {"med_id": "m_aspirin", "generic_name": "aspirin", "brand_names": ["Bayer", "Ecotrin"]},
-  {"med_id": "m_lisinopril", "generic_name": "lisinopril", "brand_names": ["Prinivil", "Zestril"]},
-  {"med_id": "m_metformin", "generic_name": "metformin", "brand_names": ["Glucophage"]},
-  {"med_id": "m_atorvastatin", "generic_name": "atorvastatin", "brand_names": ["Lipitor"]},
+  {"med_id": "m_warfarin", "generic_name": "warfarin", "brand_names": ["Coumadin", "Jantoven"], "dose": {"unit": "mg", "max_single": 10, "max_daily": 10}},
+  {"med_id": "m_ibuprofen", "generic_name": "ibuprofen", "brand_names": ["Advil", "Motrin"], "dose": {"unit": "mg", "max_single": 800, "max_daily": 3200}},
+  {"med_id": "m_aspirin", "generic_name": "aspirin", "brand_names": ["Bayer", "Ecotrin"], "dose": {"unit": "mg", "max_single": 650, "max_daily": 4000}},
+  {"med_id": "m_lisinopril", "generic_name": "lisinopril", "brand_names": ["Prinivil", "Zestril"], "dose": {"unit": "mg", "max_single": 40, "max_daily": 80}},
+  {"med_id": "m_metformin", "generic_name": "metformin", "brand_names": ["Glucophage"], "dose": {"unit": "mg", "max_single": 1000, "max_daily": 2550}},
+  {"med_id": "m_atorvastatin", "generic_name": "atorvastatin", "brand_names": ["Lipitor"], "dose": {"unit": "mg", "max_single": 80, "max_daily": 80}},
   {"med_id": "m_sildenafil", "generic_name": "sildenafil", "brand_names": ["Viagra", "Revatio"]},
   {"med_id": "m_nitroglycerin", "generic_name": "nitroglycerin", "brand_names": ["Nitrostat"]},
   {"med_id": "m_adalimumab", "generic_name": "adalimumab", "brand_names": ["Humira"]}
