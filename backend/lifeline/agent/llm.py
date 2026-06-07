@@ -1,7 +1,45 @@
 import re
+import time
 from typing import Protocol
 
 from pydantic import BaseModel
+
+from lifeline.agent.pricing import price
+from lifeline.agent.trace import build_trace_url
+
+
+def _usage_from(raw):
+    """(prompt, completion) tokens from a raw AIMessage, trying usage_metadata
+    (newer) then response_metadata['token_usage']. Returns (None, None) on miss."""
+    um = getattr(raw, "usage_metadata", None) or {}
+    if um.get("input_tokens") is not None:
+        return um.get("input_tokens"), um.get("output_tokens")
+    tu = (getattr(raw, "response_metadata", {}) or {}).get("token_usage") or {}
+    return tu.get("prompt_tokens"), tu.get("completion_tokens")
+
+
+def _request_id_from(raw):
+    rid = getattr(raw, "id", None)
+    if rid:
+        return rid
+    meta = getattr(raw, "response_metadata", {}) or {}
+    return meta.get("request_id") or meta.get("id")
+
+
+def _record_call(tlog, run_id_get, trace_base_url, *, raw, model, latency_ms):
+    """Best-effort: record one telemetry row. Never raises."""
+    if tlog is None:
+        return
+    try:
+        prompt, completion = _usage_from(raw)
+        rid = _request_id_from(raw)
+        tlog.record(run_id_get(), model=model, prompt_tokens=prompt,
+                    completion_tokens=completion, latency_ms=latency_ms,
+                    cost=price(model, prompt, completion), request_id=rid,
+                    trace_url=build_trace_url(trace_base_url, rid))
+    except Exception:
+        pass
+
 
 _PID = re.compile(r"\bp_\d+\b")
 _MID = re.compile(r"\bm_[a-z]+\b")
@@ -142,9 +180,13 @@ class TFGatewayLLM:
     metadata (verified live); ``x-tfy-resolved-model`` is a secondary fallback.
     """
 
-    def __init__(self, base_url: str, api_key: str, model: str):
+    def __init__(self, base_url: str, api_key: str, model: str,
+                 *, tlog=None, run_id_get=None, trace_base_url: str = ""):
         self.name = model
         self.last_resolved_model: str | None = None
+        self._tlog = tlog
+        self._run_id_get = run_id_get or (lambda: None)
+        self._trace_base_url = trace_base_url
         chat = _build_chat_model(base_url, api_key, model)
         self._structured = chat.with_structured_output(Intent, include_raw=True)
 
@@ -152,16 +194,21 @@ class TFGatewayLLM:
         prompt = _INTENT_PROMPT.format(text=text)
         if history:
             prompt = f"Prior visits for this patient: {history}\n\n{prompt}"
+        t0 = time.perf_counter()
         try:
             result = self._structured.invoke(prompt)
         except Exception as err:  # network/429/provider error → uniform signal for ResilientLLM
             raise LLMUnavailable(f"{self.name}: {err}") from err
+        latency_ms = int((time.perf_counter() - t0) * 1000)
         raw = result.get("raw")
         meta = getattr(raw, "response_metadata", {}) or {}
         self.last_resolved_model = (
             meta.get("model_name")
             or (meta.get("headers") or {}).get("x-tfy-resolved-model")
         )
+        _record_call(self._tlog, self._run_id_get, self._trace_base_url,
+                     raw=raw, model=self.last_resolved_model or self.name,
+                     latency_ms=latency_ms)
         return result["parsed"]
 
 
@@ -314,19 +361,30 @@ class GatewayDrafter:
     """Draft via the TF gateway (structured output). On any provider error raise
     LLMUnavailable so the draft node degrades to a dose-free message."""
 
-    def __init__(self, base_url: str, api_key: str, model: str):
+    def __init__(self, base_url: str, api_key: str, model: str,
+                 *, tlog=None, run_id_get=None, trace_base_url: str = ""):
         self.name = model
+        self._tlog = tlog
+        self._run_id_get = run_id_get or (lambda: None)
+        self._trace_base_url = trace_base_url
         chat = _build_chat_model(base_url, api_key, model)
-        self._structured = chat.with_structured_output(DraftReply)
+        self._structured = chat.with_structured_output(DraftReply, include_raw=True)
 
     def draft(self, med_id: str, prescribed: float | None, *, chaos: bool) -> DraftReply:
         prompt = _DRAFT_PROMPT.format(med=med_id.removeprefix("m_"), med_id=med_id,
                                       prescribed=prescribed if prescribed is not None else "the usual")
         if chaos:
             prompt += _DRAFT_CHAOS_SUFFIX.format(unsafe=int(_UNSAFE_DOSE_MG))
+        t0 = time.perf_counter()
         try:
-            reply = self._structured.invoke(prompt)
+            result = self._structured.invoke(prompt)
         except Exception as err:  # network/429/provider → uniform degrade signal
             raise LLMUnavailable(f"{self.name} draft: {err}") from err
+        latency_ms = int((time.perf_counter() - t0) * 1000)
+        raw = result.get("raw")
+        model = (getattr(raw, "response_metadata", {}) or {}).get("model_name") or self.name
+        _record_call(self._tlog, self._run_id_get, self._trace_base_url,
+                     raw=raw, model=model, latency_ms=latency_ms)
+        reply = result["parsed"]
         reply.med_id = med_id  # trust the known id, not the model's echo, downstream
         return reply
