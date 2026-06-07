@@ -1,5 +1,5 @@
 import type {
-  AuditEvent, BatchItem, ChaosEntry, Counts, HistoryFact,
+  AuditEvent, BatchItem, ChaosEntry, Counts, GatewayCall, HistoryFact,
   RequestSummary, ResilienceEvent, SystemState, XrayRun,
 } from "@/lib/types";
 
@@ -108,6 +108,9 @@ export const getXrayRuns = (limit = 20) => req<{ runs: XrayRun[] }>(`/xray/runs?
 export const getResilience = (runId?: string) =>
   req<{ run_id: string | null; events: ResilienceEvent[] }>(
     `/xray/resilience${runId ? `?run_id=${runId}` : ""}`);
+
+export const getTelemetry = (limit = 20) =>
+  req<{ calls: GatewayCall[] }>(`/xray/telemetry?limit=${limit}`);
 
 export const setLlmMode = (mode: string) =>
   req<{ ok: boolean; mode: string; killed: boolean }>(

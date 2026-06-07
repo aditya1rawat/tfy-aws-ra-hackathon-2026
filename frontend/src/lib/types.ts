@@ -110,6 +110,18 @@ export interface ResilienceSummary {
   degraded: boolean;
 }
 
+export interface GatewayCall {
+  run_id: string | null;
+  ts: number;
+  model: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  latency_ms: number | null;
+  cost: number | null;
+  request_id: string | null;
+  trace_url: string | null;
+}
+
 export interface XrayRun {
   request_id: string;
   patient_id: string;
@@ -118,5 +130,6 @@ export interface XrayRun {
   model_used: string | null;
   steps: { node: string; detail: string }[];
   resilience?: ResilienceSummary;
+  telemetry?: GatewayCall | null;
   created_at: number;
 }

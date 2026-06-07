@@ -14,6 +14,16 @@ export function EventLog({ runs }: { runs: XrayRun[] }) {
       {runs.map((run) => (
         <div key={run.request_id} className="mb-2">
           <div className="text-blue-400">GATE route model={run.model_used} thread={run.thread_id} status={run.status}</div>
+          {run.telemetry ? (
+            <div className="text-emerald-300">
+              <span className="inline-block w-10">TRACE</span>
+              {run.telemetry.model ?? "—"} · {(run.telemetry.prompt_tokens ?? 0) + (run.telemetry.completion_tokens ?? 0)} tok · {run.telemetry.latency_ms ?? "—"}ms
+              {run.telemetry.trace_url ? (
+                <a className="ml-2 text-indigo-300 hover:underline" href={run.telemetry.trace_url}
+                   target="_blank" rel="noreferrer">view ↗</a>
+              ) : null}
+            </div>
+          ) : null}
           {run.steps.map((s, i) => {
             const { lv, cls } = levelFor(s.detail);
             return (
