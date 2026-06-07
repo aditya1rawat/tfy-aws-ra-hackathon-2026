@@ -6,6 +6,7 @@
     "ssn": "123-45-6789",
     "plan_id": "plan_basic",
     "current_meds": ["m_warfarin", "m_lisinopril"],
+    "prescribed_doses": {"m_warfarin": 5, "m_lisinopril": 10},
     "med_history": [
       {"med_id": "m_warfarin", "started": "2019-04-01", "stopped": null},
       {"med_id": "m_lisinopril", "started": "2021-08-15", "stopped": null}
@@ -18,6 +19,7 @@
     "ssn": "987-65-4321",
     "plan_id": "plan_plus",
     "current_meds": ["m_metformin"],
+    "prescribed_doses": {"m_metformin": 500},
     "med_history": [
       {"med_id": "m_metformin", "started": "2020-01-10", "stopped": null}
     ]
@@ -29,6 +31,7 @@
     "ssn": "555-22-3333",
     "plan_id": "plan_basic",
     "current_meds": ["m_atorvastatin"],
+    "prescribed_doses": {"m_atorvastatin": 20},
     "med_history": [
       {"med_id": "m_atorvastatin", "started": "2022-06-20", "stopped": null}
     ]
