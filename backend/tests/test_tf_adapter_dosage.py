@@ -1,0 +1,29 @@
+import json
+
+from fastapi.testclient import TestClient
+
+from lifeline.guardrail.tf_adapter import app
+
+client = TestClient(app)
+
+
+def _body(payload: str) -> dict:
+    return {"requestBody": {"messages": [{"role": "assistant", "content": payload}]}}
+
+
+def test_dosage_blocks_unsafe_dose():
+    payload = json.dumps({"med_id": "m_lisinopril", "dose_mg": 80, "frequency": 1, "prescribed": 10})
+    r = client.post("/guardrails/dosage", json=_body(payload))
+    assert r.status_code == 200
+    assert r.json()["verdict"] is False
+
+
+def test_dosage_allows_safe_dose():
+    payload = json.dumps({"med_id": "m_lisinopril", "dose_mg": 10, "frequency": 1, "prescribed": 10})
+    r = client.post("/guardrails/dosage", json=_body(payload))
+    assert r.json()["verdict"] is True
+
+
+def test_dosage_fails_open_without_payload():
+    r = client.post("/guardrails/dosage", json=_body("just some prose, no json"))
+    assert r.json()["verdict"] is True
