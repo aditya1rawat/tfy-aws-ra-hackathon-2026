@@ -18,9 +18,7 @@ class _Backend:
 
 def _deps(backend, rlog=None):
     from lifeline.agent.deps import Deps
-    # guardrail=None: the field is still required on Deps at this point (Task 4
-    # removes it). The node no longer reads it. Task 4 drops this kwarg.
-    return Deps(llm=None, guardrail=None,
+    return Deps(llm=None,
                 tools=ToolGateway(backend, audit=AuditLog(), rlog=rlog,
                                   run_id_get=lambda: "r1", retries=2),
                 audit=AuditLog(), rlog=rlog)

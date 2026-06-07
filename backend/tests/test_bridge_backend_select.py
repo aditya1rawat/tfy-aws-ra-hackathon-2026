@@ -9,7 +9,7 @@ def _settings(mcp_gateway_url: str = "", api_key: str = "", use_tf: bool = False
         use_tf=use_tf, gateway_base_url="https://gw/openai", api_key=api_key,
         primary_model="anthropic/claude-sonnet-4-6", fallback_model="anthropic/claude-haiku-4-5",
         virtual_model="anthropic/claude-sonnet-4-6", chaos_virtual_model="",
-        guardrail_url="", checkpoint_db_path="", mcp_gateway_url=mcp_gateway_url,
+        checkpoint_db_path="", mcp_gateway_url=mcp_gateway_url,
     )
 
 

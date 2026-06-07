@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 
-from lifeline.agent.guardrails import InProcessInteractionGuardrail
 from lifeline.agent.llm import LLMClient, TemplatedDrafter
 from lifeline.agent.memory import NullMemoryStore
 from lifeline.agent.tools import InProcessBackend, ToolGateway
@@ -10,7 +9,6 @@ from lifeline.agent.tools import InProcessBackend, ToolGateway
 class Deps:
     llm: LLMClient
     tools: ToolGateway
-    guardrail: object  # InProcessInteractionGuardrail | HttpInteractionGuardrail
     audit: object | None = None  # AuditLog — when set, nodes log LLM + guardrail events
     memory: object = field(default_factory=NullMemoryStore)  # MemoryStore — recall/write history
     rlog: object = None  # ResilienceLog — when set, recall node records memory degrades
@@ -31,5 +29,4 @@ def local_deps(llm: LLMClient) -> Deps:
     return Deps(
         llm=llm,
         tools=ToolGateway(InProcessBackend()),
-        guardrail=InProcessInteractionGuardrail(),
     )

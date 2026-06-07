@@ -5,7 +5,6 @@ from fastapi.testclient import TestClient
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from lifeline.agent.deps import Deps
-from lifeline.agent.guardrails import InProcessInteractionGuardrail
 from lifeline.agent.llm import ChaosLLM, PatternLLM, ResilientLLM, set_llm_mode
 from lifeline.agent.tools import InProcessBackend, ToolGateway
 from lifeline.audit import AuditLog
@@ -31,7 +30,7 @@ def _client():
         llm=ResilientLLM([ChaosLLM(PatternLLM("sonnet-sim")), PatternLLM("haiku-sim")],
                          rlog=rlog, run_id_get=get_run),
         tools=ToolGateway(InProcessBackend(), audit=audit, rlog=rlog, run_id_get=get_run),
-        guardrail=InProcessInteractionGuardrail(), audit=audit,
+        audit=audit,
     )
     cp = SqliteSaver(sqlite3.connect(":memory:", check_same_thread=False))
     app = build_app(deps=deps, store=JobStore(":memory:"), checkpointer=cp, audit=audit,

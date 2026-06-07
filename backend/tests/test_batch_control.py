@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from lifeline.agent.deps import Deps
-from lifeline.agent.guardrails import InProcessInteractionGuardrail
 from lifeline.agent.llm import FakeLLM, Intent
 from lifeline.agent.tools import InProcessBackend, ToolGateway
 from lifeline.audit import AuditLog
@@ -54,7 +53,6 @@ def _worker():
     deps = Deps(
         llm=FakeLLM(Intent(patient_id="p_002", request_type="refill", med_id="m_ibuprofen")),
         tools=ToolGateway(InProcessBackend(), audit=AuditLog()),
-        guardrail=InProcessInteractionGuardrail(),
     )
     cp = SqliteSaver(sqlite3.connect(":memory:", check_same_thread=False))
     return BatchWorker(store, deps, checkpointer=cp), store
@@ -82,7 +80,6 @@ def _client():
     deps = Deps(
         llm=FakeLLM(Intent(patient_id="p_002", request_type="refill", med_id="m_ibuprofen")),
         tools=ToolGateway(InProcessBackend(), audit=AuditLog()),
-        guardrail=InProcessInteractionGuardrail(),
     )
     cp = SqliteSaver(sqlite3.connect(":memory:", check_same_thread=False))
     app = build_app(deps=deps, store=JobStore(":memory:"), checkpointer=cp, audit=AuditLog())

@@ -16,3 +16,4 @@ backend/lifeline_checkpoints.db
 
 # brainstorming visual companion
 .superpowers/
+backend/lifeline.egg-info/
