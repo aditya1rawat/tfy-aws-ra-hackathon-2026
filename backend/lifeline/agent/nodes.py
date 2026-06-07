@@ -2,7 +2,7 @@ import time
 
 from lifeline.agent.deps import Deps, decide_action
 from lifeline.agent.guardrails import redact_phi, validate_output
-from lifeline.agent.llm import Intent, LLMUnavailable, is_dose_chaos
+from lifeline.agent.llm import GatewayGuardrailBlocked, Intent, LLMUnavailable, is_dose_chaos
 from lifeline.agent.state import ItemState, Status
 from lifeline.agent.tools import ToolUnavailable
 from lifeline.resilience.context import get_run
@@ -210,6 +210,19 @@ def draft(state: ItemState, *, deps: Deps) -> dict:
     prescribed = state.get("context", {}).get("chart", {}).get("prescribed_doses", {}).get(med_id)
     try:
         reply = deps.drafter.draft(med_id, prescribed, chaos=is_dose_chaos())
+    except GatewayGuardrailBlocked as err:
+        # The gateway perimeter rejected the unsafe dose before it ever returned.
+        # Surface it as the dosage-block beat (gateway-enforced) and escalate —
+        # the app-side dose_check no-ops since there is no drafted dose.
+        if deps.audit is not None:
+            deps.audit.record("guardrail", "dosage", False, error=err.reason)
+        if deps.rlog is not None:
+            deps.rlog.record(get_run(), layer="guardrail", target="dosage",
+                             attempt=1, mode="dosage-block", backoff_ms=0,
+                             outcome="blocked")
+        return {"status": Status.ESCALATED, "dose_blocked": True,
+                "drafted_dose": None, "current_node": "draft", "error": err.reason,
+                "audit": [_audit("draft", f"BLOCK (gateway): {err.reason}")]}
     except LLMUnavailable as err:
         med = med_id.removeprefix("m_")
         return {"drafted_message": f"Your {med} refill is ready. Your care team will confirm the dose.",

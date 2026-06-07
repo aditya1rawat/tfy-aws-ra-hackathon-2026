@@ -11,6 +11,13 @@ class _BoomDrafter:
         raise LLMUnavailable("drafter down")
 
 
+class _GatewayBlockedDrafter:
+    name = "blocked"
+    def draft(self, med_id, prescribed, *, chaos):
+        from lifeline.agent.llm import GatewayGuardrailBlocked
+        raise GatewayGuardrailBlocked("lisinopril 80.0 mg exceeds max single dose 40 mg")
+
+
 def _deps(drafter, rlog=None):
     from lifeline.agent.deps import local_deps
     from lifeline.agent.llm import PatternLLM
@@ -43,6 +50,18 @@ def test_draft_degrades_to_dosefree_on_llm_unavailable():
     assert out["drafted_dose"] is None
     assert out["drafted_message"]  # a safe, dose-free message
     assert "unavailable" in out["audit"][0]["detail"].lower()
+
+
+def test_draft_gateway_block_escalates_and_records_beat():
+    rlog = ResilienceLog()
+    out = nodes.draft(_state_with_chart(), deps=_deps(_GatewayBlockedDrafter(), rlog=rlog))
+    assert out["status"] == Status.ESCALATED
+    assert out["dose_blocked"] is True
+    assert out["drafted_dose"] is None
+    assert "block (gateway)" in out["audit"][0]["detail"].lower()
+    ev = rlog.all()
+    assert ev and ev[0]["layer"] == "guardrail" and ev[0]["mode"] == "dosage-block"
+    assert ev[0]["outcome"] == "blocked"
 
 
 def test_dose_check_allows_safe_dose():
