@@ -100,19 +100,21 @@ def load_context(state: ItemState, *, deps: Deps) -> dict:
 
 
 def interaction(state: ItemState, *, deps: Deps) -> dict:
-    """Deterministic drug-interaction guardrail. Block → escalate to human.
-
-    Fail-safe: if the (possibly remote) guardrail errors, escalate — never allow.
-    """
+    """Deterministic drug-interaction guardrail, served via the interactions MCP
+    tool. Interaction found → escalate. Service down/garbled → escalate "flag for
+    pharmacist" (fail-closed; the tool degrade beat is recorded by ToolGateway)."""
     existing = state["context"]["chart"].get("current_meds", [])
     try:
-        verdict = deps.guardrail.check(existing, state["med_id"])
-    except Exception as err:  # remote guardrail down / malformed → fail closed
-        if deps.audit is not None:
-            deps.audit.record("guardrail", "interaction", False, error=str(err))
+        verdict = deps.tools.call("interactions", "check_interaction",
+                                  existing_meds=existing, proposed_med=state["med_id"])
+    except ToolUnavailable as err:  # service down after retries → fail-closed
         return {"status": Status.ESCALATED, "current_node": "interaction",
-                "error": f"guardrail unavailable: {err}",
-                "audit": [_audit("interaction", "guardrail unavailable → escalate")]}
+                "error": "interaction service unavailable → flag for pharmacist",
+                "audit": [_audit("interaction", f"service unavailable → flag for pharmacist ({err})")]}
+    if not isinstance(verdict, dict) or "decision" not in verdict:  # garbled → fail-closed
+        return {"status": Status.ESCALATED, "current_node": "interaction",
+                "error": "interaction check returned bad output → flag for pharmacist",
+                "audit": [_audit("interaction", "bad output → flag for pharmacist")]}
     blocked = verdict["decision"] == "block"
     if deps.audit is not None:
         deps.audit.record("guardrail", "interaction", not blocked,
