@@ -7,7 +7,7 @@ def _settings(use_tf: bool) -> Settings:
         use_tf=use_tf, gateway_base_url="https://gw/openai", api_key="k",
         primary_model="aws-bedrock/sonnet", fallback_model="aws-bedrock/haiku",
         virtual_model="vm/main", chaos_virtual_model="",
-        checkpoint_db_path="", mcp_gateway_url="",
+        trace_base_url="", checkpoint_db_path="", mcp_gateway_url="",
     )
 
 
