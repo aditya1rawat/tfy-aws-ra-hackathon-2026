@@ -11,6 +11,7 @@ def test_templated_drafter_uses_prescribed_dose_when_calm():
     d = TemplatedDrafter()
     reply = d.draft("m_lisinopril", prescribed=10, chaos=False)
     assert isinstance(reply, DraftReply)
+    assert reply.med_id == "m_lisinopril"
     assert reply.dose_mg == 10
     assert reply.frequency_per_day == 1
     assert "10" in reply.message

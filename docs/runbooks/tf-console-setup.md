@@ -22,29 +22,39 @@ Two independent fallback layers, demoed separately: the gateway's virtual-model 
 **and** the app-owned `ResilientLLM(ChaosLLM → fallback)`. The `Kill LLM` chaos lever on
 `/xray` forces the app layer; a primary-model outage at the gateway exercises the other.
 
-## 2. Custom guardrail — drug-interaction adapter (now a deployed service)
+## 2. Custom guardrails — interaction (input) + dosage (output) adapters
 
-The guardrail is the **`lifeline-guardrail`** service (`GUARDRAIL_URL`), which exposes
-both `/check` (called by the bridge's `interaction` node in TF mode) and
-`/guardrails/interaction` (called by the AI Gateway).
+The guardrail is the **`lifeline-guardrail`** service (`GUARDRAIL_URL`), which exposes the
+**AI Gateway** guardrail endpoints `/guardrails/interaction` (input) and `/guardrails/dosage`
+(output). The `/check` HTTP surface was **removed** (Feature C) — the agent's own interaction
+check is now a scoped MCP tool (`interactions_check_interaction`, §3), not an HTTP call to this
+service. `GUARDRAIL_URL` is therefore no longer consumed by the bridge and can be dropped from the
+bridge env; it stays only for the gateway-attached guardrails below.
 
 1. Register a **custom guardrail** of type *input* pointing at
    `${GUARDRAIL_URL}/guardrails/interaction`.
-2. Contract (implemented): gateway POSTs `{requestBody, config, context}`; the service
-   returns HTTP 200 with `{"verdict": <bool>, "message": "..."}`. `verdict:false` blocks.
-   The agent embeds `{"existing_meds": [...], "proposed_med": "..."}` as the last user message.
-3. Enable TF's **built-in PHI-redact** guardrail on LLM input (complements the app-owned
-   `redact` node). Optional: an output-validation guardrail.
+2. Register a **custom guardrail** of type *output* pointing at
+   `${GUARDRAIL_URL}/guardrails/dosage` (Feature A). The drafter's structured reply carries
+   `{med_id, dose_mg, frequency_per_day, message}`; the adapter checks the dose and returns
+   `verdict:false` to block an unsafe/hallucinated dose. App-side `dose_check` is authoritative;
+   this is the gateway-attached showcase (fail-open).
+3. Contract (implemented): gateway POSTs `{requestBody, config, context}`; the service returns
+   HTTP 200 with `{"verdict": <bool>, "message": "..."}`. `verdict:false` blocks. The interaction
+   guardrail reads `{existing_meds, proposed_med}`; the dosage guardrail reads `{med_id, dose_mg,
+   frequency, prescribed}` from the response.
+4. Enable TF's **built-in PHI-redact** guardrail on LLM input (complements the app-owned `redact`
+   node).
 
-Note the two guardrail layers both surface in the demo: the app's deterministic
-`interaction` node block (authoritative, over HTTP to `lifeline-guardrail`) and the
-gateway's input-guardrail (defense-in-depth on the LLM call).
+Guardrail layers in the demo: the app's deterministic **interaction MCP tool** block (Beat 3,
+authoritative, §3) and the app's **dose_check** block (Beat 11, authoritative); the gateway-attached
+`/guardrails/interaction` + `/guardrails/dosage` add defense-in-depth on the LLM call.
 
 Verify the service directly:
 ```bash
 curl -s ${GUARDRAIL_URL}/health
-curl -s -X POST ${GUARDRAIL_URL}/check -H 'content-type: application/json' \
-  -d '{"existing_meds":["m_warfarin"],"proposed_med":"m_aspirin"}'   # → "decision":"block"
+# dosage output guardrail — unsafe dose blocks (verdict:false)
+curl -s -X POST ${GUARDRAIL_URL}/guardrails/dosage -H 'content-type: application/json' \
+  -d '{"requestBody":{"messages":[{"role":"assistant","content":"{\"med_id\":\"m_lisinopril\",\"dose_mg\":80,\"frequency\":1,\"prescribed\":10}"}]}}'
 ```
 
 ## 3. MCP Gateway — scoped virtual MCP
