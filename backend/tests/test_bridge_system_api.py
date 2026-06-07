@@ -7,7 +7,8 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from lifeline.agent.deps import Deps
 from lifeline.agent.guardrails import InProcessInteractionGuardrail
 from lifeline.agent.llm import (
-    ChaosLLM, PatternLLM, ResilientLLM, is_gateway_chaos, set_gateway_chaos, set_llm_killed,
+    ChaosLLM, PatternLLM, ResilientLLM, is_dose_chaos, is_gateway_chaos,
+    set_dose_chaos, set_gateway_chaos, set_llm_killed,
 )
 from lifeline.agent.tools import InProcessBackend, ToolGateway
 from lifeline.audit import AuditLog
@@ -19,9 +20,9 @@ from lifeline.chaos.controller import controller
 
 @pytest.fixture(autouse=True)
 def _reset():
-    set_llm_killed(False); set_gateway_chaos(False); controller.clear_all()
+    set_llm_killed(False); set_gateway_chaos(False); set_dose_chaos(False); controller.clear_all()
     yield
-    set_llm_killed(False); set_gateway_chaos(False); controller.clear_all()
+    set_llm_killed(False); set_gateway_chaos(False); set_dose_chaos(False); controller.clear_all()
 
 
 def _client():
@@ -66,3 +67,14 @@ def test_chaos_llm_gateway_failover_toggle():
 def test_system_state_reports_gateway_failover():
     c = _client()
     assert "gateway_failover" in c.get("/system/state").json()
+
+
+def test_dose_hallucinate_lever_arms_and_resets():
+    c = _client()
+    r = c.post("/chaos/llm", json={"dose_hallucinate": True})
+    assert r.json()["dose_hallucinate"] is True
+    assert is_dose_chaos() is True
+    assert c.get("/system/state").json()["dose_hallucinate"] is True
+    c.post("/demo/reset", json={})
+    assert is_dose_chaos() is False
+    assert c.get("/system/state").json()["dose_hallucinate"] is False

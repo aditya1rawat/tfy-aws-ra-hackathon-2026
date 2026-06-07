@@ -109,6 +109,7 @@ class LlmChaos(BaseModel):
     killed: bool | None = None
     mode: str | None = None     # none | fail | ratelimit | slow
     gateway_failover: bool | None = None   # arm gateway-native model reroute
+    dose_hallucinate: bool | None = None   # force the drafter to emit an unsafe dose
 
 
 _ACTION_STATUS = {"approve_alternative": "done", "override": "done", "reject": "failed"}
@@ -255,6 +256,7 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
         controller.clear_all()
         set_llm_mode("none")
         set_gateway_chaos(False)
+        set_dose_chaos(False)
         return {"ok": True, "cleared": cleared, "requests": requests}
 
     @app.post("/demo/seed_hero")
@@ -402,6 +404,7 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
             "active_model": active_model,
             "llm_killed": killed,
             "gateway_failover": is_gateway_chaos(),
+            "dose_hallucinate": is_dose_chaos(),
             "active_chaos": active,
             "hydradb": app.state.hydradb.health(),
         }
@@ -424,8 +427,14 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
             audit.record("llm", "gateway_failover", not req.gateway_failover,
                          error="chaos: gateway failover armed" if req.gateway_failover
                          else "gateway failover disarmed")
+        if req.dose_hallucinate is not None:
+            set_dose_chaos(req.dose_hallucinate)
+            audit.record("guardrail", "dosage", not req.dose_hallucinate,
+                         error="chaos: dose hallucination armed" if req.dose_hallucinate
+                         else "dose hallucination disarmed")
         return {"ok": True, "mode": get_llm_mode(), "killed": is_llm_killed(),
-                "gateway_failover": is_gateway_chaos()}
+                "gateway_failover": is_gateway_chaos(),
+                "dose_hallucinate": is_dose_chaos()}
 
     def _resilience_summary(run_id: str) -> dict:
         ev = rlog.by_run(run_id)
