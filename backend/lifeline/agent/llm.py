@@ -18,12 +18,16 @@ def _usage_from(raw):
     return tu.get("prompt_tokens"), tu.get("completion_tokens")
 
 
+_REQUEST_ID_HEADERS = ("x-tfy-request-id", "x-request-id", "x-trace-id", "traceparent")
+
+
 def _request_id_from(raw):
-    rid = getattr(raw, "id", None)
-    if rid:
-        return rid
     meta = getattr(raw, "response_metadata", {}) or {}
-    return meta.get("request_id") or meta.get("id")
+    headers = meta.get("headers") or {}
+    for key in _REQUEST_ID_HEADERS:  # prefer the gateway's own request/trace id
+        if headers.get(key):
+            return headers[key]
+    return meta.get("request_id") or meta.get("id") or getattr(raw, "id", None)
 
 
 def _record_call(tlog, run_id_get, trace_base_url, *, raw, model, latency_ms):

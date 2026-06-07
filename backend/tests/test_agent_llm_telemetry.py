@@ -74,6 +74,20 @@ def test_capture_never_raises_on_bad_metadata(monkeypatch):
     assert row["latency_ms"] is not None
 
 
+def test_request_id_prefers_gateway_header(monkeypatch):
+    intent = Intent(patient_id="p_001", request_type="refill", med_id="m_lisinopril")
+    raw = _FakeRaw()
+    raw.response_metadata["headers"] = {"x-tfy-request-id": "tfy_req_42"}
+    _patch(monkeypatch, intent, raw)
+    tlog = TelemetryLog()
+    llm = TFGatewayLLM("http://gw", "k", "vm/main", tlog=tlog, run_id_get=lambda: "r4",
+                       trace_base_url="https://app.tfy/traces")
+    llm.parse_intent("x")
+    row = tlog.by_run("r4")[0]
+    assert row["request_id"] == "tfy_req_42"           # header wins over raw.id
+    assert row["trace_url"] == "https://app.tfy/traces/tfy_req_42"
+
+
 def test_clients_work_without_tlog(monkeypatch):
     intent = Intent(patient_id="p_001", request_type="refill", med_id="m_lisinopril")
     _patch(monkeypatch, intent, _FakeRaw())
