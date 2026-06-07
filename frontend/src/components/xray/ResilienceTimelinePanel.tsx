@@ -5,6 +5,7 @@ const OUTCOME: Record<string, { dot: string; label: string }> = {
   fail: { dot: "bg-amber-400", label: "failed" },
   recovered: { dot: "bg-emerald-400", label: "recovered" },
   degraded: { dot: "bg-red-400", label: "degraded" },
+  blocked: { dot: "bg-red-500", label: "blocked" },
 };
 
 export function ResilienceTimelinePanel({ events }: { events: ResilienceEvent[] }) {

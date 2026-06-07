@@ -6,7 +6,7 @@ Single source of human-readable language for the patient timeline and the clinic
 from lifeline.bridge.names import med_name
 
 # Internal nodes never shown to users.
-_HIDDEN_NODES = {"redact", "validate", "finalize"}
+_HIDDEN_NODES = {"redact", "validate", "finalize", "draft"}
 
 # node -> (icon, title) for the human step list. detail is appended where useful.
 _STEP_TITLES = {
@@ -15,6 +15,7 @@ _STEP_TITLES = {
     "interaction": ("checked", "Checked against current medications"),
     "coverage": ("checked", "Checked insurance coverage"),
     "act": ("approved", "Processed request"),
+    "dose_check": ("checked", "Checked the prescribed dose"),
 }
 
 _DEGRADED_MARKERS = ("queue", "unavailable", "killed")
@@ -42,6 +43,12 @@ def _steps(state: dict) -> list[dict]:
             reason = detail[len("BLOCK:"):].strip()
             steps.append({"icon": "blocked",
                           "title": "Safety check blocked the request",
+                          "detail": reason})
+            continue
+        if node == "dose_check" and detail.startswith("BLOCK:"):
+            reason = detail[len("BLOCK:"):].strip()
+            steps.append({"icon": "blocked",
+                          "title": "Safety hold — dose flagged for your clinician",
                           "detail": reason})
             continue
         icon, title = _STEP_TITLES[node]
@@ -106,10 +113,16 @@ def humanize(state: dict, *, decision: str | None, primary_model: str) -> dict:
         (e.get("node") == "interaction" and (e.get("detail") or "").startswith("BLOCK:"))
         for e in state.get("audit", [])
     )
+    dose_blocked = bool(state.get("dose_blocked")) or any(
+        (e.get("node") == "dose_check" and (e.get("detail") or "").startswith("BLOCK:"))
+        for e in state.get("audit", [])
+    )
     alt = _suggested_alternative(state) if blocked else None
     clinic_flag = None
     if blocked and status not in ("approved", "rejected"):
         clinic_flag = f"Do not auto-approve. {state.get('error') or 'Interaction flagged.'}"
+    if dose_blocked:
+        clinic_flag = f"Unsafe dose blocked. {state.get('error') or 'Dose flagged.'}"
     returning = _returning_patient(state)
     prior_escalated = any(
         f.get("med") == state.get("med_id") and f.get("outcome") == "escalated"
@@ -122,7 +135,9 @@ def humanize(state: dict, *, decision: str | None, primary_model: str) -> dict:
         "degraded": degraded,
         "med": med_name(state.get("med_id") or ""),
         "steps": _steps(state),
-        "patient_message": _patient_message(status, degraded, alt),
+        "patient_message": (state.get("drafted_message")
+                            if status == "approved" and state.get("drafted_message") and not dose_blocked
+                            else _patient_message(status, degraded, alt)),
         "clinic_flag": clinic_flag,
         "suggested_alternative": alt,
         "returning_patient": returning,

@@ -14,8 +14,10 @@ from pydantic import BaseModel
 from lifeline.agent.deps import Deps
 from lifeline.agent.guardrails import HttpInteractionGuardrail, InProcessInteractionGuardrail
 from lifeline.agent.llm import (
-    ChaosLLM, FakeLLM, GatewayRouterLLM, Intent, PatternLLM, ResilientLLM, TFGatewayLLM,
-    get_llm_mode, is_gateway_chaos, is_llm_killed, set_gateway_chaos, set_llm_killed, set_llm_mode,
+    ChaosLLM, FakeLLM, GatewayDrafter, GatewayRouterLLM, Intent, PatternLLM,
+    ResilientLLM, TemplatedDrafter, TFGatewayLLM,
+    get_llm_mode, is_dose_chaos, is_gateway_chaos, is_llm_killed,
+    set_dose_chaos, set_gateway_chaos, set_llm_killed, set_llm_mode,
 )
 from lifeline.resilience.context import get_run
 from lifeline.resilience.log import ResilienceLog
@@ -107,6 +109,7 @@ class LlmChaos(BaseModel):
     killed: bool | None = None
     mode: str | None = None     # none | fail | ratelimit | slow
     gateway_failover: bool | None = None   # arm gateway-native model reroute
+    dose_hallucinate: bool | None = None   # force the drafter to emit an unsafe dose
 
 
 _ACTION_STATUS = {"approve_alternative": "done", "override": "done", "reject": "failed"}
@@ -253,6 +256,7 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
         controller.clear_all()
         set_llm_mode("none")
         set_gateway_chaos(False)
+        set_dose_chaos(False)
         return {"ok": True, "cleared": cleared, "requests": requests}
 
     @app.post("/demo/seed_hero")
@@ -400,6 +404,7 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
             "active_model": active_model,
             "llm_killed": killed,
             "gateway_failover": is_gateway_chaos(),
+            "dose_hallucinate": is_dose_chaos(),
             "active_chaos": active,
             "hydradb": app.state.hydradb.health(),
         }
@@ -422,8 +427,14 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
             audit.record("llm", "gateway_failover", not req.gateway_failover,
                          error="chaos: gateway failover armed" if req.gateway_failover
                          else "gateway failover disarmed")
+        if req.dose_hallucinate is not None:
+            set_dose_chaos(req.dose_hallucinate)
+            audit.record("guardrail", "dosage", not req.dose_hallucinate,
+                         error="chaos: dose hallucination armed" if req.dose_hallucinate
+                         else "dose hallucination disarmed")
         return {"ok": True, "mode": get_llm_mode(), "killed": is_llm_killed(),
-                "gateway_failover": is_gateway_chaos()}
+                "gateway_failover": is_gateway_chaos(),
+                "dose_hallucinate": is_dose_chaos()}
 
     def _resilience_summary(run_id: str) -> dict:
         ev = rlog.by_run(run_id)
@@ -513,6 +524,14 @@ def _select_llm(settings: Settings, rlog: ResilienceLog | None = None):
     return ResilientLLM([ChaosLLM(primary), fallback], rlog=rlog, run_id_get=get_run)
 
 
+def _select_drafter(settings: Settings):
+    """Live: draft patient replies through the TF gateway. Offline: deterministic
+    templated drafter (no provider needed)."""
+    if settings.use_tf:
+        return GatewayDrafter(settings.gateway_base_url, settings.api_key, settings.virtual_model)
+    return TemplatedDrafter()
+
+
 def primary_model_name(settings: Settings) -> str:
     """The model the primary client reports (for degraded detection)."""
     return settings.primary_model if settings.use_tf else "sonnet-sim"
@@ -529,6 +548,7 @@ def _default_app() -> FastAPI:
         audit=audit,
         memory=_select_memory(settings),
         rlog=rlog,
+        drafter=_select_drafter(settings),
     )
     store = make_job_store(settings)
     checkpointer = make_checkpointer(settings)

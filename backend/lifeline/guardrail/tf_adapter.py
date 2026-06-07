@@ -3,6 +3,7 @@ import json
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from lifeline.agent.dosage import check_dose
 from lifeline.agent.guardrails import InProcessInteractionGuardrail
 
 app = FastAPI(title="Lifeline TrueFoundry Guardrail Adapter")
@@ -64,4 +65,30 @@ def interaction(req: InputGuardrailRequest) -> GuardrailResponse:
         # fail open: the authoritative block is the app-owned node, not this guardrail
         return GuardrailResponse(verdict=True, message="no interaction payload found")
     verdict = _guardrail.check(meds["existing_meds"], meds["proposed_med"])
+    return GuardrailResponse(verdict=verdict["decision"] != "block", message=verdict["reason"])
+
+
+def _extract_dose(req: RequestBody) -> dict | None:
+    for msg in reversed(req.messages):
+        if msg.role not in ("assistant", "user"):
+            continue
+        try:
+            data = json.loads(msg.content)
+        except (json.JSONDecodeError, TypeError):
+            return None
+        if "med_id" in data and "dose_mg" in data:
+            return data
+        return None
+    return None
+
+
+@app.post("/guardrails/dosage", response_model=GuardrailResponse)
+def dosage(req: InputGuardrailRequest) -> GuardrailResponse:
+    payload = _extract_dose(req.requestBody)
+    if payload is None:
+        # fail open: the app-owned dose_check node is the authoritative block
+        return GuardrailResponse(verdict=True, message="no dose payload found")
+    verdict = check_dose(payload["med_id"], payload["dose_mg"],
+                         int(payload.get("frequency", 1)),
+                         prescribed=payload.get("prescribed"))
     return GuardrailResponse(verdict=verdict["decision"] != "block", message=verdict["reason"])

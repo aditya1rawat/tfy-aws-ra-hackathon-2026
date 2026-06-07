@@ -33,6 +33,9 @@ class ItemState(TypedDict, total=False):
     audit: Annotated[list, operator.add]
     patient_history: list      # prior facts recalled at intake ([] if none/degraded)
     memory_degraded: bool      # True when recall failed → history unavailable
+    drafted_message: str | None  # patient-facing reply text from the draft node
+    drafted_dose: dict | None    # {"mg": float, "freq": int} or None when degraded
+    dose_blocked: bool           # True when dose_check blocked an unsafe dose
 
 
 def new_state(*, item_id: str, patient_id: str, request_type: str, med_id: str,
@@ -57,4 +60,7 @@ def new_state(*, item_id: str, patient_id: str, request_type: str, med_id: str,
         "audit": [],
         "patient_history": [],
         "memory_degraded": False,
+        "drafted_message": None,
+        "drafted_dose": None,
+        "dose_blocked": False,
     }

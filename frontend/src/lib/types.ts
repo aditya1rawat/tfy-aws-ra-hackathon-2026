@@ -88,13 +88,14 @@ export interface SystemState {
   active_model: string;
   llm_killed: boolean;
   gateway_failover?: boolean;
+  dose_hallucinate?: boolean;
   active_chaos: ChaosEntry[];
 }
 
 export interface ResilienceEvent {
   run_id: string | null;
   ts: number;
-  layer: "llm" | "tool" | "memory";
+  layer: "llm" | "tool" | "memory" | "guardrail";
   target: string;
   attempt: number;
   mode: string | null;

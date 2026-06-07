@@ -2,7 +2,7 @@ import time
 
 from lifeline.agent.deps import Deps, decide_action
 from lifeline.agent.guardrails import redact_phi, validate_output
-from lifeline.agent.llm import Intent, LLMUnavailable
+from lifeline.agent.llm import Intent, LLMUnavailable, is_dose_chaos
 from lifeline.agent.state import ItemState, Status
 from lifeline.agent.tools import ToolUnavailable
 from lifeline.resilience.context import get_run
@@ -198,3 +198,49 @@ def finalize(state: ItemState, *, deps: Deps) -> dict:
             pass
     return {"status": status, "current_node": "finalize",
             "audit": [_audit("finalize", f"terminal={status}")]}
+
+
+def draft(state: ItemState, *, deps: Deps) -> dict:
+    """Draft the patient-facing reply WITH a dose (gateway LLM). Degrade-safe:
+    on draft failure, fall back to a dose-free message — nothing for dose_check
+    to guard, patient still served."""
+    med_id = state["med_id"]
+    prescribed = state.get("context", {}).get("chart", {}).get("prescribed_doses", {}).get(med_id)
+    try:
+        reply = deps.drafter.draft(med_id, prescribed, chaos=is_dose_chaos())
+    except LLMUnavailable as err:
+        med = med_id.removeprefix("m_")
+        return {"drafted_message": f"Your {med} refill is ready. Your care team will confirm the dose.",
+                "drafted_dose": None, "current_node": "draft",
+                "audit": [_audit("draft", f"drafter unavailable → dose-free message ({err})")]}
+    return {"drafted_message": reply.message,
+            "drafted_dose": {"mg": reply.dose_mg, "freq": reply.frequency_per_day},
+            "current_node": "draft",
+            "audit": [_audit("draft", f"drafted dose {reply.dose_mg:g} mg")]}
+
+
+def dose_check(state: ItemState, *, deps: Deps) -> dict:
+    """Authoritative dosage guardrail on the drafted reply. Unsafe → block →
+    escalate; the drafted text is discarded (never shown). Records a guardrail
+    resilience beat."""
+    from lifeline.agent.dosage import check_dose
+    drafted = state.get("drafted_dose")
+    if not drafted:  # degraded draft → no dose to guard
+        return {"current_node": "dose_check",
+                "audit": [_audit("dose_check", "no dose to check")]}
+    med_id = state["med_id"]
+    prescribed = state.get("context", {}).get("chart", {}).get("prescribed_doses", {}).get(med_id)
+    verdict = check_dose(med_id, drafted["mg"], drafted["freq"], prescribed=prescribed)
+    if deps.audit is not None:
+        deps.audit.record("guardrail", "dosage", verdict["decision"] != "block",
+                          error=verdict["reason"] if verdict["decision"] == "block" else None)
+    if verdict["decision"] == "block":
+        if deps.rlog is not None:
+            deps.rlog.record(get_run(), layer="guardrail", target="dosage",
+                             attempt=1, mode="dosage-block", backoff_ms=0,
+                             outcome="blocked")
+        return {"status": Status.ESCALATED, "dose_blocked": True,
+                "current_node": "dose_check", "error": verdict["reason"],
+                "audit": [_audit("dose_check", f"BLOCK: {verdict['reason']}")]}
+    return {"status": Status.DONE, "current_node": "dose_check",
+            "audit": [_audit("dose_check", "dose ok")]}

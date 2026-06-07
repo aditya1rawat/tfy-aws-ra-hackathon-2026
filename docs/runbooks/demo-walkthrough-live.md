@@ -222,6 +222,43 @@ resolved primary name so reroute-detection fires).
 > - **Reset** → `llm_killed/degraded/gateway_failover` all false, runs cleared,
 >   `active_model` back to sonnet.
 
+---
+
+## Dosage-safety guardrail (AI Gateway: Guardrails)
+
+A second guardrail covers a different axis than the interaction check (Beat 3). After the
+agent approves a refill, a **`draft`** node calls the gateway LLM to write the patient-facing
+reply **including a dose**; a **`dose_check`** node then enforces deterministic dose rules
+(`agent/dosage.py`: per-med ceiling + the chart's prescribed dose). Unsafe → **block →
+escalate**; the drafted text is discarded, never shown. The same rules back a real TFY
+**Gateway output guardrail** (`/guardrails/dosage` on the DO guardrail adapter) — the
+gateway-attached showcase; the app `dose_check` node is authoritative, the adapter fails open.
+
+The **Hallucinate dose** lever (`POST /chaos/llm {"dose_hallucinate":true}`) makes the drafter
+emit a deliberately unsafe dose so the block fires on cue (mirrors the `gateway_failover`
+lever). Cleared by `/demo/reset`; surfaced in `/system/state` as `dose_hallucinate`.
+
+### Beat 11 — Gateway blocks an unsafe dose in the drafted reply (AI Gateway: Guardrails)
+- **Do:** `/xray` → **Hallucinate dose**, submit a `p_001` lisinopril refill.
+- **Result:** the model drafts "80 mg" (prescribed/safe is 10 mg, ceiling 40 mg); `dose_check`
+  blocks → the run escalates, `/patient` shows a **"Safety hold — dose flagged for your
+  clinician"** step (the unsafe number never reaches the patient message), and `/xray` records
+  the beat `guardrail · dosage · dosage-block · blocked`. Clinic queue flag: "Unsafe dose
+  blocked. …".
+- **vs Beat 3 (interaction):** Beat 3 is an *input-side* drug-drug check before the agent acts;
+  Beat 11 guards the *drafted output* — the dose the model itself wrote. Two guardrails, two
+  axes.
+- **Calm path:** lever off → the drafter states the prescribed 10 mg → `dose_check` allows →
+  patient sees the normal confirmation. The guardrail allows good output too.
+- **Verify:** `POST /chaos/llm {"dose_hallucinate":true}` → `POST /patient/request` (p_001,
+  m_lisinopril, refill) → `GET /xray/resilience` shows the `dosage-block` beat. Calm run (lever
+  off) reaches `done` with nodes `…validate → draft → dose_check → finalize`.
+
+> **Local-verified 2026-06-06** (offline drafter, `server.py` guardrail on :8010): calm
+> lisinopril refill → `done`, full draft/dose_check path, dose allowed; **Hallucinate dose**
+> armed → `escalated` + `guardrail · dosage · dosage-block · blocked`; reset clears. Live TFY
+> output-guardrail attachment (`/guardrails/dosage`) + deployed-bridge smoke pending (Phase 0).
+
 ## Driving the recorded take (B3 demo controls)
 
 The `/xray` surface has a **DemoBar**: `[Run hero request] [Seed hero] [Reset demo]`.
