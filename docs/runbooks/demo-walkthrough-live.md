@@ -317,11 +317,13 @@ line in the event stream — each with a **View trace ↗** deep-link into TFY M
   `<base>/<request-id>`. Request-id prefers a gateway header (`x-tfy-request-id`/`x-request-id`/…),
   falling back to the langchain run id. With no base set, `trace_url` is `null` and the link hides.
 
-> **Local-verified 2026-06-07** (live gateway, `USE_TF=true`): a lisinopril refill captured a real
-> call — `model: aws-bedrock/global.anthropic.claude-sonnet-4-6`, 353+92 tokens, 5291ms, **cost
-> $0.002439**; `/xray/runs` carries the per-run `telemetry`; `/demo/reset` clears it. **Pending:** set
-> `TF_TRACE_BASE_URL` on the deployed bridge + confirm the captured request-id resolves in the TFY
-> Monitoring console (Phase 0 step 2) so **View trace ↗** lands on the right trace.
+> **DEPLOYED-verified 2026-06-07** (prod bridge, live gateway): a lisinopril refill captured TWO real
+> gateway calls — intake parse (344+30 tok, 1900ms, $0.001482) + dosage draft (353+90 tok, 3610ms,
+> $0.002409), both `model: aws-bedrock/global.anthropic.claude-sonnet-4-6`; `/xray/telemetry` + the
+> per-run `telemetry` on `/xray/runs` both populate; `/demo/reset` clears. **Pending (deep-link only):**
+> set `TF_TRACE_BASE_URL` on the bridge + confirm the captured request-id resolves a TFY Monitoring
+> trace (Phase 0 step 2) so **View trace ↗** lands right. Numbers are live; only `trace_url` is null
+> until the base is set.
 
 ## Driving the recorded take (B3 demo controls)
 
