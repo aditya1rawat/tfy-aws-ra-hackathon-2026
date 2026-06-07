@@ -254,10 +254,11 @@ lever). Cleared by `/demo/reset`; surfaced in `/system/state` as `dose_hallucina
   m_lisinopril, refill) → `GET /xray/resilience` shows the `dosage-block` beat. Calm run (lever
   off) reaches `done` with nodes `…validate → draft → dose_check → finalize`.
 
-> **Local-verified 2026-06-06** (offline drafter, `server.py` guardrail on :8010): calm
-> lisinopril refill → `done`, full draft/dose_check path, dose allowed; **Hallucinate dose**
-> armed → `escalated` + `guardrail · dosage · dosage-block · blocked`; reset clears. Live TFY
-> output-guardrail attachment (`/guardrails/dosage`) + deployed-bridge smoke pending (Phase 0).
+> **DEPLOYED-verified 2026-06-06** (live bridge, real gateway drafter): calm lisinopril refill →
+> `done`, full `…draft → dose_check → finalize` path, dose allowed; **Hallucinate dose** armed →
+> `escalated` + `guardrail · dosage · dosage-block · blocked`; reset clears. Still pending: live TFY
+> output-guardrail attachment (`/guardrails/dosage`, Phase 0) — the app `dose_check` node is the
+> authoritative block and is live-verified.
 
 ---
 
@@ -292,11 +293,11 @@ The **Kill interaction check** `/xray` pill arms `chaos.set("interactions","chec
   → `POST /patient/request` (p_001, m_aspirin, refill) → `GET /xray/resilience` shows the degraded
   beat.
 
-> **Local-verified 2026-06-06** (in-process MCP backend): found run → `escalated` at the
-> interaction node (Beat 3); **Kill interaction check** → retries fail → `escalated` "flag for
-> pharmacist" + `tool · interactions.check_interaction · degraded` beat; reset clears. The
-> interaction check no longer needs the `:8010 /check` server. Live MCP-Gateway registration of the
-> `interactions` tool + deployed smoke pending.
+> **DEPLOYED-verified 2026-06-06** (live bridge): found run → `escalated` at the interaction node
+> (Beat 3); **Kill interaction check** → retries fail → `escalated` "flag for pharmacist" +
+> `tool · interactions.check_interaction · degraded` beat. The interaction check no longer needs the
+> `:8010 /check` server. Still pending: live MCP-Gateway registration of the `interactions` tool
+> (the in-process backend serves it live until then).
 
 ## Driving the recorded take (B3 demo controls)
 
