@@ -92,6 +92,12 @@ def _response_contents(body: dict | None):
         msg = (choice or {}).get("message") or {}
         if msg.get("content") is not None:
             yield msg["content"]
+        # structured output (with_structured_output) carries the reply in
+        # tool_calls[].function.arguments (a JSON string) with content null
+        for call in msg.get("tool_calls", []) or []:
+            args = ((call or {}).get("function") or {}).get("arguments")
+            if args is not None:
+                yield args
     for msg in body.get("messages", []) or []:
         if isinstance(msg, dict) and msg.get("content") is not None:
             yield msg["content"]
