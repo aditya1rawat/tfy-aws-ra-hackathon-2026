@@ -123,6 +123,12 @@ def humanize(state: dict, *, decision: str | None, primary_model: str) -> dict:
         clinic_flag = f"Do not auto-approve. {state.get('error') or 'Interaction flagged.'}"
     if dose_blocked:
         clinic_flag = f"Unsafe dose blocked. {state.get('error') or 'Dose flagged.'}"
+    interaction_down = any(
+        e.get("node") == "interaction" and "flag for pharmacist" in (e.get("detail") or "").lower()
+        for e in state.get("audit", [])
+    )
+    if interaction_down:
+        clinic_flag = "Flag for pharmacist — interaction check unavailable."
     returning = _returning_patient(state)
     prior_escalated = any(
         f.get("med") == state.get("med_id") and f.get("outcome") == "escalated"
