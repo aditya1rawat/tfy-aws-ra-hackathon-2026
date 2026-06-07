@@ -22,6 +22,7 @@ import {
 	resetDemo,
 	seedHero,
 	setChaos,
+	setDoseHallucinate,
 	setGatewayFailover,
 	setLlmChaos,
 	setLlmMode
@@ -107,6 +108,12 @@ export default function XrayPage() {
 							wrap(
 								() => setGatewayFailover(on),
 								on ? 'Gateway failover armed' : 'Gateway failover disarmed'
+							)()
+						}
+						onDoseHallucinate={on =>
+							wrap(
+								() => setDoseHallucinate(on),
+								on ? 'Dose hallucination armed' : 'Dose hallucination disarmed'
 							)()
 						}
 						onCascade={wrap(() => applyCascade(), 'Cascade applied')}

@@ -13,7 +13,7 @@ const CLEAR_ON = "ring-emerald-500/60 bg-emerald-500/15 text-emerald-200 hover:b
 const CLEAR_OFF = "ring-zinc-800 bg-zinc-900 text-zinc-500";
 
 export function ChaosControls({
-  state, onLlmMode, onKillTool, onGatewayFailover, onCascade, onClear, busy,
+  state, onLlmMode, onKillTool, onGatewayFailover, onCascade, onClear, onDoseHallucinate, busy,
 }: {
   state: SystemState | null;
   onLlmMode: (mode: string) => void;
@@ -21,11 +21,13 @@ export function ChaosControls({
   onGatewayFailover: (on: boolean) => void;
   onCascade: () => void;
   onClear: () => void;
+  onDoseHallucinate: (on: boolean) => void;
   busy: boolean;
 }) {
   const mode = state?.llm_killed ? "fail" : "none";
   const toolActive = (state?.active_chaos?.length ?? 0) > 0;
   const failoverActive = state?.gateway_failover ?? false;
+  const doseActive = state?.dose_hallucinate ?? false;
   const anyChaos = mode !== "none" || toolActive;
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -45,6 +47,10 @@ export function ChaosControls({
       </button>
       <button className={`${BASE} ${WARN}`} disabled={busy} onClick={onCascade}>
         Cascade
+      </button>
+      <button className={`${BASE} ${doseActive ? WARN : IDLE}`} disabled={busy}
+              onClick={() => onDoseHallucinate(!doseActive)}>
+        {doseActive ? "⚡ Dose hallucinating" : "Hallucinate dose"}
       </button>
       <button className={`${BASE} ${anyChaos ? CLEAR_ON : CLEAR_OFF}`}
               disabled={busy || !anyChaos} onClick={onClear}>
