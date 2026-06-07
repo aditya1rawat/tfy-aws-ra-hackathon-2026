@@ -23,7 +23,12 @@ const STATES: { key: string; label: string; dot: string; seg: string }[] = [
   { key: "failed", label: "Failed", dot: "bg-red-300", seg: "bg-red-700" },
 ];
 
-export function BatchMonitorPanel({ tone = "light" }: { tone?: "light" | "dark" }) {
+export function BatchMonitorPanel({ tone = "light", onCleared }: {
+  tone?: "light" | "dark";
+  // Fired after Kill & clear wipes the queue, so a host page can also reset its
+  // live-run / event-stream panels (the batch clear nukes audit + resilience).
+  onCleared?: () => void;
+}) {
   const status = useLive(STATUS_KEY, getBatchStatus, 800);
   const control = useLive(CONTROL_KEY, getBatchControl, 800);
   const [seedCount, setSeedCount] = useState("");
@@ -135,7 +140,7 @@ export function BatchMonitorPanel({ tone = "light" }: { tone?: "light" | "dark" 
         ) : null}
 
         <div className="ml-auto">
-          <Button className="h-9 px-4 bg-red-600 text-white hover:bg-red-500" disabled={busy || (total === 0 && !running)} onClick={act(clearBatch)}>
+          <Button className="h-9 px-4 bg-red-600 text-white hover:bg-red-500" disabled={busy || (total === 0 && !running)} onClick={act(async () => { await clearBatch(); onCleared?.(); })}>
             Kill &amp; clear
           </Button>
         </div>

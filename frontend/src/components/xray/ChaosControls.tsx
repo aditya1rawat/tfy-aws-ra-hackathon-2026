@@ -1,10 +1,16 @@
 "use client";
-import { Button } from "@/components/ui/button";
 import type { SystemState } from "@/lib/types";
 
-const IDLE = "h-9 px-4 border border-zinc-700 bg-zinc-800 text-zinc-100 hover:bg-zinc-700";
-const ACTIVE = "h-9 px-4 border border-red-500 bg-red-600 text-white hover:bg-red-500";
-const WARN = "h-9 px-4 border border-amber-500 bg-amber-600 text-white hover:bg-amber-500";
+// Shared compact-pill system (matches DemoBar) so the whole header row reads as
+// one consistent control strip: same height, radius, text size; color encodes
+// state (neutral idle, red active/danger, amber warn, emerald clear).
+const BASE =
+  "h-8 rounded-md px-3 text-xs font-medium ring-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
+const IDLE = "ring-zinc-700 bg-zinc-800/60 text-zinc-200 hover:bg-zinc-700/70";
+const DANGER = "ring-red-500/70 bg-red-500/25 text-red-100 hover:bg-red-500/35";
+const WARN = "ring-amber-500/60 bg-amber-500/20 text-amber-200 hover:bg-amber-500/30";
+const CLEAR_ON = "ring-emerald-500/60 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25";
+const CLEAR_OFF = "ring-zinc-800 bg-zinc-900 text-zinc-500";
 
 export function ChaosControls({
   state, onLlmMode, onKillTool, onGatewayFailover, onCascade, onClear, busy,
@@ -23,30 +29,27 @@ export function ChaosControls({
   const anyChaos = mode !== "none" || toolActive;
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button className={mode === "fail" ? ACTIVE : IDLE} disabled={busy}
+      <button className={`${BASE} ${mode === "fail" ? DANGER : IDLE}`} disabled={busy}
               onClick={() => onLlmMode(mode === "fail" ? "none" : "fail")}>
         {mode === "fail" ? "⚡ LLM killed" : "Kill LLM"}
-      </Button>
-      <Button className={IDLE} disabled={busy} onClick={() => onLlmMode("ratelimit")}>
+      </button>
+      <button className={`${BASE} ${IDLE}`} disabled={busy} onClick={() => onLlmMode("ratelimit")}>
         Rate-limit LLM
-      </Button>
-      <Button className={failoverActive ? WARN : IDLE} disabled={busy}
+      </button>
+      <button className={`${BASE} ${failoverActive ? WARN : IDLE}`} disabled={busy}
               onClick={() => onGatewayFailover(!failoverActive)}>
         {failoverActive ? "⚡ Gateway rerouting" : "Gateway failover"}
-      </Button>
-      <Button className={toolActive ? ACTIVE : IDLE} disabled={busy} onClick={onKillTool}>
+      </button>
+      <button className={`${BASE} ${toolActive ? DANGER : IDLE}`} disabled={busy} onClick={onKillTool}>
         {toolActive ? "⚡ Tool failing" : "Kill chart tool"}
-      </Button>
-      <Button className={WARN} disabled={busy} onClick={onCascade}>
+      </button>
+      <button className={`${BASE} ${WARN}`} disabled={busy} onClick={onCascade}>
         Cascade
-      </Button>
-      <Button
-        className={`h-9 px-4 border ${anyChaos ? "border-emerald-500 bg-emerald-600 text-white hover:bg-emerald-500" : "border-zinc-700 bg-zinc-900 text-zinc-400"}`}
-        disabled={busy || !anyChaos}
-        onClick={onClear}
-      >
+      </button>
+      <button className={`${BASE} ${anyChaos ? CLEAR_ON : CLEAR_OFF}`}
+              disabled={busy || !anyChaos} onClick={onClear}>
         Clear chaos
-      </Button>
+      </button>
     </div>
   );
 }

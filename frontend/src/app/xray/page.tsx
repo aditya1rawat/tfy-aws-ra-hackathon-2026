@@ -65,12 +65,26 @@ export default function XrayPage() {
 	const onSeed = wrap(() => seedHero(), 'Hero seeded');
 	const onReset = wrap(() => resetDemo(), 'Demo reset');
 
+	// Reset the ephemeral live-run frames and refetch the persisted runs/timeline
+	// so a chaos clear or batch wipe empties the Live-run + Event-stream panels
+	// without a page refresh.
+	const clearRunPanels = () => {
+		stream.reset();
+		mutate('/xray/runs');
+		mutate('/xray/resilience');
+	};
+	const onClearChaos = wrap(async () => {
+		await clearChaos();
+		clearRunPanels();
+	}, 'Chaos cleared');
+
 	return (
 		<main className='min-h-screen bg-zinc-950 p-4 text-zinc-100'>
 			<div className='mb-3 flex items-center justify-between gap-3'>
 				<h1 className='font-bold'>🔬 Lifeline X-ray</h1>
-				<div className='flex items-center gap-3'>
+				<div className='flex flex-wrap items-center gap-2'>
 					<DemoBar busy={busy || stream.running} onRun={onRun} onSeed={onSeed} onReset={onReset} />
+					<div className='mx-1 h-6 w-px bg-zinc-800' aria-hidden />
 					<ChaosControls
 						state={system}
 						busy={busy}
@@ -96,14 +110,14 @@ export default function XrayPage() {
 							)()
 						}
 						onCascade={wrap(() => applyCascade(), 'Cascade applied')}
-						onClear={wrap(() => clearChaos(), 'Chaos cleared')}
+						onClear={onClearChaos}
 					/>
 				</div>
 			</div>
 			<div className='grid grid-cols-1 items-start gap-4 lg:grid-cols-4'>
 				{/* Main column: batch on top, then live/event + proof/cost */}
 				<div className='space-y-4 lg:col-span-3'>
-					<BatchMonitorPanel tone='dark' />
+					<BatchMonitorPanel tone='dark' onCleared={clearRunPanels} />
 
 					<div className='grid grid-cols-1 items-start gap-4 lg:grid-cols-3'>
 						{/* Live run + event stream */}
@@ -138,8 +152,8 @@ export default function XrayPage() {
 				</div>
 
 				{/* Right rail: audit trail — whole right side, alongside batch */}
-				<aside className='lg:col-span-1 h-full'>
-					<div className='lg:sticky lg:top-4 h-full'>
+				<aside className='lg:col-span-1'>
+					<div className='lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)]'>
 						<AuditPanel tone='dark' />
 					</div>
 				</aside>

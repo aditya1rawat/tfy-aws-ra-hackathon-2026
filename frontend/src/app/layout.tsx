@@ -32,7 +32,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <PersonaSwitcher />
         {children}
-        <Toaster richColors position="top-right" />
+        <Toaster richColors closeButton position="top-right" duration={2500} />
       </body>
     </html>
   );

@@ -26,5 +26,14 @@ export function useNodeStream() {
     }
   }, []);
 
-  return { events, running, start };
+  // Drop the accumulated live-run frames and invalidate any in-flight stream so
+  // a chaos clear / batch wipe returns the panel to its resting state without a
+  // page refresh.
+  const reset = useCallback(() => {
+    seq.current++;
+    setEvents([]);
+    setRunning(false);
+  }, []);
+
+  return { events, running, start, reset };
 }
