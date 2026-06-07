@@ -68,23 +68,58 @@ def interaction(req: InputGuardrailRequest) -> GuardrailResponse:
     return GuardrailResponse(verdict=verdict["decision"] != "block", message=verdict["reason"])
 
 
-def _extract_dose(req: RequestBody) -> dict | None:
-    for msg in reversed(req.messages):
-        if msg.role not in ("assistant", "user"):
-            continue
+def _dose_from(content) -> dict | None:
+    """Return the dose payload if `content` (a JSON string or dict) carries one."""
+    if isinstance(content, dict):
+        data = content
+    else:
         try:
-            data = json.loads(msg.content)
+            data = json.loads(content)
         except (json.JSONDecodeError, TypeError):
             return None
-        if "med_id" in data and "dose_mg" in data:
-            return data
-        return None
+    if isinstance(data, dict) and "med_id" in data and "dose_mg" in data:
+        return data
+    return None
+
+
+def _response_contents(body: dict | None):
+    """Yield candidate assistant-output strings from a gateway responseBody,
+    covering the common chat-completion shapes (choices/message, messages, plain
+    content/output_text)."""
+    if not isinstance(body, dict):
+        return
+    for choice in body.get("choices", []) or []:
+        msg = (choice or {}).get("message") or {}
+        if msg.get("content") is not None:
+            yield msg["content"]
+    for msg in body.get("messages", []) or []:
+        if isinstance(msg, dict) and msg.get("content") is not None:
+            yield msg["content"]
+    for key in ("content", "output_text"):
+        if body.get(key) is not None:
+            yield body[key]
+
+
+def _extract_dose(req: InputGuardrailRequest) -> dict | None:
+    """Find the drafted dose payload. A dosage guardrail is output-targeted, but
+    gateways deliver the model output differently — scan the request messages AND
+    the responseBody so the block fires whichever shape arrives."""
+    for msg in reversed(req.requestBody.messages):
+        if msg.role not in ("assistant", "user"):
+            continue
+        found = _dose_from(msg.content)
+        if found is not None:
+            return found
+    for content in _response_contents(req.responseBody):
+        found = _dose_from(content)
+        if found is not None:
+            return found
     return None
 
 
 @app.post("/guardrails/dosage", response_model=GuardrailResponse)
 def dosage(req: InputGuardrailRequest) -> GuardrailResponse:
-    payload = _extract_dose(req.requestBody)
+    payload = _extract_dose(req)
     if payload is None:
         # fail open: the app-owned dose_check node is the authoritative block
         return GuardrailResponse(verdict=True, message="no dose payload found")
