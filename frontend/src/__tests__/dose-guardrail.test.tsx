@@ -16,7 +16,7 @@ describe("dose hallucinate lever", () => {
     const onDose = vi.fn();
     render(<ChaosControls state={baseState} busy={false} onLlmMode={noop}
       onKillTool={noop} onGatewayFailover={noop} onCascade={noop} onClear={noop}
-      onDoseHallucinate={onDose} />);
+      onDoseHallucinate={onDose} onKillInteraction={noop} />);
     fireEvent.click(screen.getByText("Hallucinate dose"));
     expect(onDose).toHaveBeenCalledWith(true);
   });
@@ -24,7 +24,7 @@ describe("dose hallucinate lever", () => {
   it("shows the active label when armed", () => {
     render(<ChaosControls state={{ ...baseState, dose_hallucinate: true }} busy={false}
       onLlmMode={noop} onKillTool={noop} onGatewayFailover={noop} onCascade={noop}
-      onClear={noop} onDoseHallucinate={noop} />);
+      onClear={noop} onDoseHallucinate={noop} onKillInteraction={noop} />);
     expect(screen.getByText("⚡ Dose hallucinating")).toBeTruthy();
   });
 });

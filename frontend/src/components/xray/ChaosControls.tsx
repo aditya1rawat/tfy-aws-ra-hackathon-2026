@@ -13,7 +13,7 @@ const CLEAR_ON = "ring-emerald-500/60 bg-emerald-500/15 text-emerald-200 hover:b
 const CLEAR_OFF = "ring-zinc-800 bg-zinc-900 text-zinc-500";
 
 export function ChaosControls({
-  state, onLlmMode, onKillTool, onGatewayFailover, onCascade, onClear, onDoseHallucinate, busy,
+  state, onLlmMode, onKillTool, onGatewayFailover, onCascade, onClear, onDoseHallucinate, onKillInteraction, busy,
 }: {
   state: SystemState | null;
   onLlmMode: (mode: string) => void;
@@ -22,13 +22,16 @@ export function ChaosControls({
   onCascade: () => void;
   onClear: () => void;
   onDoseHallucinate: (on: boolean) => void;
+  onKillInteraction: () => void;
   busy: boolean;
 }) {
   const mode = state?.llm_killed ? "fail" : "none";
-  const toolActive = (state?.active_chaos?.length ?? 0) > 0;
+  const chartActive = (state?.active_chaos ?? []).some((c) => c.server === "chart");
+  const interactionActive = (state?.active_chaos ?? []).some((c) => c.server === "interactions");
+  const toolActive = chartActive;
   const failoverActive = state?.gateway_failover ?? false;
   const doseActive = state?.dose_hallucinate ?? false;
-  const anyChaos = mode !== "none" || toolActive;
+  const anyChaos = mode !== "none" || chartActive || interactionActive;
   return (
     <div className="flex flex-wrap items-center gap-2">
       <button className={`${BASE} ${mode === "fail" ? DANGER : IDLE}`} disabled={busy}
@@ -44,6 +47,10 @@ export function ChaosControls({
       </button>
       <button className={`${BASE} ${toolActive ? DANGER : IDLE}`} disabled={busy} onClick={onKillTool}>
         {toolActive ? "⚡ Tool failing" : "Kill chart tool"}
+      </button>
+      <button className={`${BASE} ${interactionActive ? DANGER : IDLE}`} disabled={busy}
+              onClick={onKillInteraction}>
+        {interactionActive ? "⚡ Interaction check down" : "Kill interaction check"}
       </button>
       <button className={`${BASE} ${WARN}`} disabled={busy} onClick={onCascade}>
         Cascade

@@ -32,7 +32,7 @@ describe("gateway failover", () => {
     const onGatewayFailover = vi.fn();
     render(
       <ChaosControls state={baseState} busy={false} onLlmMode={noop} onKillTool={noop}
-        onGatewayFailover={onGatewayFailover} onCascade={noop} onClear={noop} onDoseHallucinate={noop} />,
+        onGatewayFailover={onGatewayFailover} onCascade={noop} onClear={noop} onDoseHallucinate={noop} onKillInteraction={noop} />,
     );
     fireEvent.click(screen.getByText(/Gateway failover/i));
     expect(onGatewayFailover).toHaveBeenCalledWith(true);
@@ -41,7 +41,7 @@ describe("gateway failover", () => {
   it("ChaosControls shows rerouting state when active", () => {
     render(
       <ChaosControls state={{ ...baseState, gateway_failover: true }} busy={false}
-        onLlmMode={noop} onKillTool={noop} onGatewayFailover={noop} onCascade={noop} onClear={noop} onDoseHallucinate={noop} />,
+        onLlmMode={noop} onKillTool={noop} onGatewayFailover={noop} onCascade={noop} onClear={noop} onDoseHallucinate={noop} onKillInteraction={noop} />,
     );
     expect(screen.getByText(/Gateway rerouting/i)).toBeTruthy();
   });
