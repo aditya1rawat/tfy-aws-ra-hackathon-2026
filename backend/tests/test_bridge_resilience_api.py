@@ -47,6 +47,22 @@ def test_llm_ratelimit_records_resilience_events():
     assert any(e["outcome"] == "recovered" for e in ev)
 
 
+def test_interactive_streamed_run_records_resilience_events():
+    # Regression: a streamed /interactive run must still record resilience beats.
+    # The graph runs in a worker thread holding run_scope; if the run-id contextvar
+    # were lost across the StreamingResponse threadpool, this would record nothing.
+    c = _client()
+    c.post("/chaos/llm", json={"mode": "ratelimit"})
+    with c.stream("POST", "/interactive", json={
+        "item_id": "stream_rl", "patient_id": "p_002", "request_type": "refill", "med_id": "m_ibuprofen",
+        "raw_text": "Patient p_002 requests refill of m_ibuprofen",  # exercise the LLM (intake parse)
+    }) as r:
+        list(r.iter_lines())  # drain so the worker thread completes
+    ev = c.get("/xray/resilience?run_id=stream_rl").json()["events"]
+    assert any(e["layer"] == "llm" and e["mode"] == "ratelimit" for e in ev)
+    assert any(e["outcome"] == "recovered" for e in ev)
+
+
 def test_xray_runs_bundles_resilience_summary():
     c = _client()
     c.post("/chaos/llm", json={"mode": "ratelimit"})

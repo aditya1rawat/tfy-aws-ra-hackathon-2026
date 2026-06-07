@@ -156,8 +156,17 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
         )
 
         def gen():
-            for event in runner.stream(state, thread_id=thread_id):
+            terminal: dict = {}
+            for event in runner.stream(state, thread_id=thread_id, capture=terminal):
                 yield f"data: {json.dumps(event)}\n\n"
+            # Persist the completed run so it reaches the patient requests list,
+            # the clinic queue, and /xray — the stream itself is otherwise
+            # ephemeral. Best-effort: a persist hiccup must not break the stream.
+            try:
+                if terminal:
+                    request_store.add(thread_id, terminal)
+            except Exception:
+                pass
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 

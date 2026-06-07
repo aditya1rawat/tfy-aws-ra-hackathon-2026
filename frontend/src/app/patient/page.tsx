@@ -28,8 +28,11 @@ export default function PatientPage() {
   const onSubmit = async (medId: string, reason: string) => {
     setBusy(true);
     try {
-      // Live stream the run so the timeline animates node-by-node.
-      await stream.start({ patient_id: PATIENT, med_id: medId, request_type: "refill", raw_text: reason });
+      // Live stream the run so the timeline animates node-by-node. The med is
+      // a structured pick (dropdown), so DON'T send the reason as raw_text — that
+      // would route intake through free-text LLM parsing, which can't recover the
+      // patient/med from a bare reason and nulls them. Structured fields drive the run.
+      await stream.start({ patient_id: PATIENT, med_id: medId, request_type: "refill" });
       notify("Request processed");
     } catch {
       // SSE unsupported / network → fall back to fire-and-forget submit.
