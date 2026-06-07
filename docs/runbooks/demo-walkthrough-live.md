@@ -177,6 +177,51 @@ Memory **never** touches the deterministic interaction guardrail.
 >   redeploy, submit → `/xray` shows the memory degrade, patient still served; then restore
 >   the real key.
 
+---
+
+## Gateway-native model failover (AI Gateway: Virtual Models)
+
+Model→model failover moves **into a TFY Virtual Model**. The app calls one virtual-model
+name (`lifeline-resilient-chat/resilient-chat`, priority routing sonnet→haiku); the gateway
+reroutes on 5xx/429/auth failures intrinsic to its target list. The app keeps its *own*
+resilience around it (retry, degrade-to-offline `PatternLLM`, chaos). A gateway reroute is a
+new **`gateway-failover`** beat in `/xray`. `GatewayRouterLLM` detects it by comparing the
+resolved model (`response_metadata['model_name']`) against `TF_PRIMARY_MODEL`; when they
+differ it records `layer=llm · mode=gateway-failover · recovered · recovered_by=<served model>`.
+
+The demo trigger is a second **chaos** virtual model (`…/resilient-chat-chaos`) whose primary
+sonnet target carries an Override-Header `Authorization: Bearer invalid` → Bedrock SigV4
+fails → gateway reroutes to the haiku target. The `/xray` **Gateway failover** lever
+(`POST /chaos/llm {"gateway_failover":true}`) routes the app through the chaos VM.
+
+Bridge env: `TF_VIRTUAL_MODEL=lifeline-resilient-chat/resilient-chat`,
+`TF_CHAOS_VIRTUAL_MODEL=lifeline-resilient-chat/resilient-chat-chaos`,
+`TF_PRIMARY_MODEL=aws-bedrock/global.anthropic.claude-sonnet-4-6` (must equal the gateway's
+resolved primary name so reroute-detection fires).
+
+### Beat 10 — Gateway reroutes the model, app never notices (AI Gateway: failover)
+- **Do:** `/xray` → **Gateway failover**, submit a request.
+- **Result:** the gateway's primary (sonnet) target fails, the gateway itself reroutes to
+  haiku, and the run completes `recovered`. The timeline shows
+  `llm · gateway · gateway-failover · recovered → aws-bedrock/us.…claude-haiku-4-5…`. The app
+  made one call to one model name; the *gateway* owned the failover.
+- **vs Beat 1 (app-level Kill LLM):** Kill LLM breaks the gateway entirely → the app's own
+  fallback degrades to `offline-sim`. Beat 10 keeps the gateway up but breaks one target →
+  the gateway picks the next target. Two independent layers of failover, both visible.
+- **Verify:** `POST /chaos/llm {"gateway_failover":true}` → `POST /patient/request` →
+  `GET /xray/resilience` shows the `gateway-failover` beat. (`/patient/request` persists the
+  run; `/interactive` streams only and won't appear in `/xray/runs`.)
+
+> **Live-verified 2026-06-06** (bridge deploy with both VM envs set, ACTIVE):
+> - **Gateway failover armed** → `p_001`+`m_aspirin` → run `model_used:
+>   lifeline-resilient-chat/resilient-chat`, beat `gateway-failover · recovered ·
+>   recovered_by: aws-bedrock/us.anthropic.claude-haiku-4-5-20251001-v1-0`.
+> - **Kill LLM** (gateway fully down) → 2 gateway attempts `fail` → degrade to `offline-sim ·
+>   recovered`; `model_used: offline-sim`. Levers reconcile: arming Kill LLM clears
+>   `gateway_failover`.
+> - **Reset** → `llm_killed/degraded/gateway_failover` all false, runs cleared,
+>   `active_model` back to sonnet.
+
 ## Driving the recorded take (B3 demo controls)
 
 The `/xray` surface has a **DemoBar**: `[Run hero request] [Seed hero] [Reset demo]`.
