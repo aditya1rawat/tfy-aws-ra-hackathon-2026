@@ -117,6 +117,17 @@ retry-backoff-recovery **visible**: a per-run `ResilienceLog` surfaced on `/xray
   story; the node badge shows `⟳1 ✓`.
 - **Verify:** `POST /chaos/llm {"mode":"ratelimit"}` → request → `GET /xray/resilience?run_id=<id>`.
 
+> **Why the 429 is injected in code, not tripped at the gateway (deliberate split):** the lever is a
+> deterministic **429 *injector*** (`ChaosLLM` ratelimit mode → `LLMRateLimited`), not a code
+> rate-limiter. It exists to fire the app's **resilience-to-a-429** path (retry → backoff → fallback,
+> recorded on the timeline) on cue in a live demo — a real gateway rate-limit can only be tripped by
+> actually flooding past a threshold, which is non-deterministic, slow, and burns tokens, so it won't
+> land on the beat reliably. **Enforcement still lives at the gateway:** the virtual model's **budget
+> cap** (`tf-console-setup.md §1`) is the genuine gateway-owned rate/spend limit. This mirrors the
+> hybrid split used throughout — the **gateway owns enforcement** (budget cap, model failover / Beat
+> 10), the **app owns its own resilience + the demo levers**. We fake only the *trigger*, never the
+> *enforcement*.
+
 ### Beat 7 — Timeout → graceful degrade (Resilience: slow responses)
 - **Do:** `POST /chaos/set {"server":"chart","tool":"get_patient_chart","mode":"timeout"}` → submit.
 - **Result:** the chart call raises a timeout, retries with backoff, then degrades to
