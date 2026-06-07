@@ -14,8 +14,10 @@ from pydantic import BaseModel
 from lifeline.agent.deps import Deps
 from lifeline.agent.guardrails import HttpInteractionGuardrail, InProcessInteractionGuardrail
 from lifeline.agent.llm import (
-    ChaosLLM, FakeLLM, GatewayRouterLLM, Intent, PatternLLM, ResilientLLM, TFGatewayLLM,
-    get_llm_mode, is_gateway_chaos, is_llm_killed, set_gateway_chaos, set_llm_killed, set_llm_mode,
+    ChaosLLM, FakeLLM, GatewayDrafter, GatewayRouterLLM, Intent, PatternLLM,
+    ResilientLLM, TemplatedDrafter, TFGatewayLLM,
+    get_llm_mode, is_dose_chaos, is_gateway_chaos, is_llm_killed,
+    set_dose_chaos, set_gateway_chaos, set_llm_killed, set_llm_mode,
 )
 from lifeline.resilience.context import get_run
 from lifeline.resilience.log import ResilienceLog
@@ -513,6 +515,14 @@ def _select_llm(settings: Settings, rlog: ResilienceLog | None = None):
     return ResilientLLM([ChaosLLM(primary), fallback], rlog=rlog, run_id_get=get_run)
 
 
+def _select_drafter(settings: Settings):
+    """Live: draft patient replies through the TF gateway. Offline: deterministic
+    templated drafter (no provider needed)."""
+    if settings.use_tf:
+        return GatewayDrafter(settings.gateway_base_url, settings.api_key, settings.virtual_model)
+    return TemplatedDrafter()
+
+
 def primary_model_name(settings: Settings) -> str:
     """The model the primary client reports (for degraded detection)."""
     return settings.primary_model if settings.use_tf else "sonnet-sim"
@@ -529,6 +539,7 @@ def _default_app() -> FastAPI:
         audit=audit,
         memory=_select_memory(settings),
         rlog=rlog,
+        drafter=_select_drafter(settings),
     )
     store = make_job_store(settings)
     checkpointer = make_checkpointer(settings)
