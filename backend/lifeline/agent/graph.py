@@ -21,6 +21,13 @@ def _route_after_act(state: ItemState) -> str:
     return "finalize" if state["status"] in Status.TERMINAL else "validate"
 
 
+def _route_after_validate(state: ItemState) -> str:
+    # Only the approved refill path drafts a dose-bearing reply to guard.
+    if state["status"] == Status.DONE and state.get("action") == "refill":
+        return "draft"
+    return "finalize"
+
+
 def _bind(node_fn, deps: Deps):
     """Wrap a node as a clean single-arg callable so LangGraph injects only state."""
     def _node(state: ItemState) -> dict:
@@ -32,7 +39,7 @@ def build_graph(deps: Deps, *, checkpointer, interrupt_before: list[str] | None 
     """Assemble and compile the per-item pipeline graph."""
     builder = StateGraph(ItemState)
     for name in ["recall", "intake", "redact", "load_context", "interaction",
-                 "coverage", "act", "validate", "finalize"]:
+                 "coverage", "act", "validate", "draft", "dose_check", "finalize"]:
         builder.add_node(name, _bind(getattr(nodes, name), deps))
 
     builder.add_edge(START, "recall")
@@ -47,7 +54,10 @@ def build_graph(deps: Deps, *, checkpointer, interrupt_before: list[str] | None 
                                   {"act": "act", "finalize": "finalize"})
     builder.add_conditional_edges("act", _route_after_act,
                                   {"validate": "validate", "finalize": "finalize"})
-    builder.add_edge("validate", "finalize")
+    builder.add_conditional_edges("validate", _route_after_validate,
+                                  {"draft": "draft", "finalize": "finalize"})
+    builder.add_edge("draft", "dose_check")
+    builder.add_edge("dose_check", "finalize")
     builder.add_edge("finalize", END)
 
     return builder.compile(checkpointer=checkpointer, interrupt_before=interrupt_before or [])
