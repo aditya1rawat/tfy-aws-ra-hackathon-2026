@@ -7,6 +7,7 @@ import { CostPanel } from '@/components/CostPanel';
 import { ChaosControls } from '@/components/xray/ChaosControls';
 import { DemoBar } from '@/components/xray/DemoBar';
 import { EventLog } from '@/components/xray/EventLog';
+import { GatewayTelemetryPanel } from '@/components/xray/GatewayTelemetryPanel';
 import { LiveNodeList } from '@/components/patient/LiveNodeList';
 import { NodeGraph } from '@/components/xray/NodeGraph';
 import { ProofPanels } from '@/components/xray/ProofPanels';
@@ -18,6 +19,7 @@ import {
 	clearChaos,
 	getResilience,
 	getSystemState,
+	getTelemetry,
 	getXrayRuns,
 	resetDemo,
 	seedHero,
@@ -33,6 +35,7 @@ export default function XrayPage() {
 	const system = useLive('/system/state', getSystemState);
 	const xray = useLive('/xray/runs', () => getXrayRuns(20));
 	const resilience = useLive('/xray/resilience', () => getResilience(), 1500);
+	const telemetry = useLive('/xray/telemetry', () => getTelemetry(20), 2000);
 	const [busy, setBusy] = useState(false);
 	const stream = useNodeStream();
 	const runs = xray?.runs ?? [];
@@ -161,6 +164,7 @@ export default function XrayPage() {
 						{/* Resilience timeline stacked on proof + cost / routing */}
 						<section className='space-y-4 lg:col-span-1'>
 							<ResilienceTimelinePanel events={resilience?.events ?? []} />
+							<GatewayTelemetryPanel calls={telemetry?.calls ?? []} />
 							<ProofPanels state={system} latest={latest} />
 							<CostPanel tone='dark' />
 						</section>

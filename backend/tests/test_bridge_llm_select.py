@@ -16,7 +16,7 @@ def _live_settings():
     return SimpleNamespace(use_tf=True, primary_model="bedrock-main/claude-sonnet-4-6",
                            fallback_model="y", virtual_model="lifeline/resilient-chat",
                            chaos_virtual_model="lifeline/resilient-chat-chaos",
-                           gateway_base_url="http://gw", api_key="k")
+                           gateway_base_url="http://gw", api_key="k", trace_base_url="")
 
 
 def _patch_chat(monkeypatch):

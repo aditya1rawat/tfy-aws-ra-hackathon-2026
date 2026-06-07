@@ -1,0 +1,4 @@
+[
+  {"pattern": "sonnet", "prompt_per_1k": 0.003, "completion_per_1k": 0.015},
+  {"pattern": "haiku", "prompt_per_1k": 0.0008, "completion_per_1k": 0.004}
+]

@@ -20,6 +20,7 @@ from lifeline.agent.llm import (
 )
 from lifeline.resilience.context import get_run
 from lifeline.resilience.log import ResilienceLog
+from lifeline.resilience.telemetry import TelemetryLog
 from lifeline.agent.state import new_state
 from lifeline.agent.tools import InProcessBackend, MCPBackend, ToolGateway
 from lifeline.audit import AuditLog
@@ -117,13 +118,16 @@ _ACTION_STATUS = {"approve_alternative": "done", "override": "done", "reject": "
 def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
               request_store: RequestStore | None = None,
               primary_model: str = "sonnet-sim",
-              rlog: ResilienceLog | None = None) -> FastAPI:
+              rlog: ResilienceLog | None = None,
+              tlog: TelemetryLog | None = None) -> FastAPI:
     app = FastAPI(title="Lifeline Bridge")
     request_store = request_store or RequestStore()
     rlog = rlog or ResilienceLog()
+    tlog = tlog or TelemetryLog()
     app.state.request_store = request_store
     app.state.primary_model = primary_model
     app.state.rlog = rlog
+    app.state.tlog = tlog
     app.state.hydradb = HydraDBClient(
         api_key=os.environ.get("HYDRADB_API_KEY", ""),
         tenant_id=os.environ.get("HYDRADB_TENANT_ID", ""),
@@ -252,6 +256,7 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
         requests = request_store.clear()
         audit.clear()
         rlog.clear()
+        tlog.clear()
         controller.clear_all()
         set_llm_mode("none")
         set_gateway_chaos(False)
@@ -443,12 +448,20 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
             "degraded": any(e["outcome"] == "degraded" for e in ev),
         }
 
+    def _telemetry_summary(run_id: str) -> dict | None:
+        rows = tlog.by_run(run_id)
+        return rows[-1] if rows else None
+
     @app.get("/xray/resilience")
     def xray_resilience(run_id: str | None = None) -> dict:
         if run_id is None:
             runs = request_store.list_all()
             run_id = runs[0]["request_id"] if runs else None
         return {"run_id": run_id, "events": rlog.by_run(run_id) if run_id else []}
+
+    @app.get("/xray/telemetry")
+    def xray_telemetry(limit: int = 20) -> dict:
+        return {"calls": tlog.recent(limit)}
 
     @app.get("/xray/runs")
     def xray_runs(limit: int = 20) -> dict:
@@ -463,6 +476,7 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
                 "model_used": st.get("model_used"),
                 "steps": st.get("audit", []),
                 "resilience": _resilience_summary(rec["request_id"]),
+                "telemetry": _telemetry_summary(rec["request_id"]),
                 "created_at": rec["created_at"],
             })
         return {"runs": runs}
@@ -491,7 +505,8 @@ def _select_backend(settings: Settings):
     return InProcessBackend()
 
 
-def _select_llm(settings: Settings, rlog: ResilienceLog | None = None):
+def _select_llm(settings: Settings, rlog: ResilienceLog | None = None,
+                tlog: TelemetryLog | None = None):
     """Hybrid split: the gateway owns model→model failover (one virtual model);
     the app keeps retry + degrade-to-offline (PatternLLM).
 
@@ -503,8 +518,10 @@ def _select_llm(settings: Settings, rlog: ResilienceLog | None = None):
     model-fallback beat stays demoable without a live provider.
     """
     if settings.use_tf:
-        healthy = TFGatewayLLM(settings.gateway_base_url, settings.api_key, settings.virtual_model)
-        chaos = (TFGatewayLLM(settings.gateway_base_url, settings.api_key, settings.chaos_virtual_model)
+        healthy = TFGatewayLLM(settings.gateway_base_url, settings.api_key, settings.virtual_model,
+                               tlog=tlog, run_id_get=get_run, trace_base_url=settings.trace_base_url)
+        chaos = (TFGatewayLLM(settings.gateway_base_url, settings.api_key, settings.chaos_virtual_model,
+                              tlog=tlog, run_id_get=get_run, trace_base_url=settings.trace_base_url)
                  if settings.chaos_virtual_model else None)
         gateway = GatewayRouterLLM(healthy, chaos=chaos,
                                    primary_target=settings.primary_model,
@@ -516,11 +533,12 @@ def _select_llm(settings: Settings, rlog: ResilienceLog | None = None):
     return ResilientLLM([ChaosLLM(primary), fallback], rlog=rlog, run_id_get=get_run)
 
 
-def _select_drafter(settings: Settings):
+def _select_drafter(settings: Settings, tlog: TelemetryLog | None = None):
     """Live: draft patient replies through the TF gateway. Offline: deterministic
     templated drafter (no provider needed)."""
     if settings.use_tf:
-        return GatewayDrafter(settings.gateway_base_url, settings.api_key, settings.virtual_model)
+        return GatewayDrafter(settings.gateway_base_url, settings.api_key, settings.virtual_model,
+                              tlog=tlog, run_id_get=get_run, trace_base_url=settings.trace_base_url)
     return TemplatedDrafter()
 
 
@@ -533,20 +551,21 @@ def _default_app() -> FastAPI:
     settings = get_settings()
     audit = AuditLog()
     rlog = ResilienceLog()
+    tlog = TelemetryLog()
     deps = Deps(
-        llm=_select_llm(settings, rlog=rlog),
+        llm=_select_llm(settings, rlog=rlog, tlog=tlog),
         tools=ToolGateway(_select_backend(settings), audit=audit, rlog=rlog, run_id_get=get_run),
         audit=audit,
         memory=_select_memory(settings),
         rlog=rlog,
-        drafter=_select_drafter(settings),
+        drafter=_select_drafter(settings, tlog=tlog),
     )
     store = make_job_store(settings)
     checkpointer = make_checkpointer(settings)
     request_store = make_request_store(settings)
     return build_app(deps=deps, store=store, checkpointer=checkpointer, audit=audit,
                      request_store=request_store, primary_model=primary_model_name(settings),
-                     rlog=rlog)
+                     rlog=rlog, tlog=tlog)
 
 
 app = _default_app()
