@@ -185,7 +185,7 @@ export default function XrayPage() {
 						<section className='space-y-4 lg:col-span-1'>
 							<ResilienceTimelinePanel events={resilience?.events ?? []} />
 							<GatewayTelemetryPanel calls={telemetry?.calls ?? []} />
-							<ProofPanels state={system} latest={latest} />
+							<ProofPanels state={system} latest={latest} resilience={resilience?.events ?? []} />
 							<CostPanel tone='dark' />
 						</section>
 					</div>
