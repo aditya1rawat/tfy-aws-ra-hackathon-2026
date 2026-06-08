@@ -6,7 +6,7 @@ The live narration script for the judges. Three product surfaces, one agent, two
 
 | Surface | Local URL | Subdomain (prod) | Who |
 |---|---|---|---|
-| Patient portal | http://localhost:3000/patient | `patient.<domain>` | Aditya Rawat (patient) |
+| Patient portal | http://localhost:3000/patient | `patient.<domain>` | John Doe (patient) |
 | Clinic console | http://localhost:3000/clinic | `clinic.<domain>` | R. Okafor, PharmD |
 | X-ray / ops | http://localhost:3000/xray | `dashboard.<domain>` | you (engineer) |
 
@@ -33,8 +33,8 @@ Reset between runs: restart the backend (the RequestStore is in-memory, so this 
 
 1. **X-ray** → click **Kill LLM**. Point out the chaos lever: "I've just taken down the primary model."
 2. **Patient portal** → in *Request a medication*, pick **Aspirin 325mg**, Submit.
-   - Aditya is on warfarin. Watch the request card: amber **"taking a little longer than usual"** strip (the fallback firing), then it resolves to **escalated** with the safety note + the pharmacist's **Acetaminophen** alternative.
-3. **Clinic console** → Aditya's request sits in the queue as **Escalated**. Select it.
+   - John is on warfarin. Watch the request card: amber **"taking a little longer than usual"** strip (the fallback firing), then it resolves to **escalated** with the safety note + the pharmacist's **Acetaminophen** alternative.
+3. **Clinic console** → John's request sits in the queue as **Escalated**. Select it.
    - "What the agent did": verified patient & coverage → checked against current meds → **🛑 Safety check blocked** (aspirin + warfarin bleeding risk) → escalated. Plus the red **Do not auto-approve** flag and the suggested alternative.
    - Top strip: **"AI provider degraded → fallback model active (haiku-sim)"**.
    - Click **Approve alternative & notify patient**.

@@ -153,31 +153,32 @@ export default function XrayPage() {
 				</div>
 			</div>
 			<div className='grid grid-cols-1 items-start gap-4 lg:grid-cols-4'>
-				{/* Main column: batch on top, then live/event + proof/cost */}
+				{/* Main column: live/event on top, then batch + proof/cost */}
 				<div className='space-y-4 lg:col-span-3'>
-					<BatchMonitorPanel tone='dark' onCleared={clearRunPanels} />
+					{/* Live run + event stream — full width, the hero of the surface */}
+					<div className='space-y-4 rounded-xl bg-zinc-900 p-4 ring-1 ring-zinc-800'>
+						<div>
+							<h2 className='mb-2 text-[10px] uppercase tracking-wide text-zinc-500'>
+								Live run · {latest?.patient_id ?? '—'}
+							</h2>
+							{stream.running || stream.events.length > 0 ? (
+									<LiveNodeList events={stream.events} />
+								) : (
+									<NodeGraph run={latest} />
+								)}
+						</div>
+						<div>
+							<h2 className='mb-2 text-[10px] uppercase tracking-wide text-zinc-500'>
+								Event stream
+							</h2>
+							<EventLog runs={runs} />
+						</div>
+					</div>
 
 					<div className='grid grid-cols-1 items-start gap-4 lg:grid-cols-3'>
-						{/* Live run + event stream */}
+						{/* Batch processing */}
 						<section className='lg:col-span-2'>
-							<div className='space-y-4 rounded-xl bg-zinc-900 p-4 ring-1 ring-zinc-800'>
-								<div>
-									<h2 className='mb-2 text-[10px] uppercase tracking-wide text-zinc-500'>
-										Live run · {latest?.patient_id ?? '—'}
-									</h2>
-									{stream.running || stream.events.length > 0 ? (
-											<LiveNodeList events={stream.events} />
-										) : (
-											<NodeGraph run={latest} />
-										)}
-								</div>
-								<div>
-									<h2 className='mb-2 text-[10px] uppercase tracking-wide text-zinc-500'>
-										Event stream
-									</h2>
-									<EventLog runs={runs} />
-								</div>
-							</div>
+							<BatchMonitorPanel tone='dark' onCleared={clearRunPanels} />
 						</section>
 
 						{/* Resilience timeline stacked on proof + cost / routing */}

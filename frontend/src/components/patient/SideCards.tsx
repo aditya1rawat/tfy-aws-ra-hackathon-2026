@@ -26,7 +26,7 @@ export function SideCards() {
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sm font-semibold text-sky-700">RO</div>
           <div>
             <div className="text-sm text-slate-700">
-              &ldquo;Hi Aditya — remember to keep your INR check appointment this week. Reach out with any questions.&rdquo;
+              &ldquo;Hi John — remember to keep your INR check appointment this week. Reach out with any questions.&rdquo;
             </div>
             <div className="mt-1 text-xs text-slate-400">R. Okafor, PharmD · 2h ago</div>
           </div>

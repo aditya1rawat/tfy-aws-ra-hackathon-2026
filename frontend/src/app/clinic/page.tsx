@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { mutate } from "swr";
 import { AgentSummary } from "@/components/clinic/AgentSummary";
-import { ClinicShell } from "@/components/clinic/ClinicShell";
 import { ClinicStats } from "@/components/clinic/ClinicStats";
 import { RequestQueue } from "@/components/clinic/RequestQueue";
 import { ReturningPatientPanel } from "@/components/clinic/ReturningPatientPanel";
@@ -32,8 +31,7 @@ export default function ClinicPage() {
   };
 
   return (
-    <ClinicShell>
-      <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Pharmacy review queue</h1>
@@ -93,6 +91,5 @@ export default function ClinicPage() {
           </div>
         </div>
       </div>
-    </ClinicShell>
   );
 }

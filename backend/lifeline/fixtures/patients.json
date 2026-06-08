@@ -1,7 +1,7 @@
 [
   {
     "patient_id": "p_001",
-    "name": "Aditya Rawat",
+    "name": "John Doe",
     "dob": "1958-03-12",
     "ssn": "123-45-6789",
     "plan_id": "plan_basic",
