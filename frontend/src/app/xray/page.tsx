@@ -162,7 +162,7 @@ export default function XrayPage() {
 								Live run · {latest?.patient_id ?? '—'}
 							</h2>
 							{stream.running || stream.events.length > 0 ? (
-									<LiveNodeList events={stream.events} />
+									<LiveNodeList events={stream.events} cap running={stream.running} />
 								) : (
 									<NodeGraph run={latest} />
 								)}
