@@ -1,3 +1,5 @@
+import base64
+import json
 import re
 import time
 from typing import Protocol
@@ -30,6 +32,21 @@ def _request_id_from(raw):
     return meta.get("request_id") or meta.get("id") or getattr(raw, "id", None)
 
 
+def _trace_id_from(raw):
+    """TFY's OTEL trace id for this call, from the ``x-tfy-feedback-target-id``
+    response header (base64 JSON ``{traceId, spanId}``). This is the id the
+    Monitoring console keys traces on — distinct from the numeric request id and
+    from the langchain run id. Returns None when absent/unparseable."""
+    headers = (getattr(raw, "response_metadata", {}) or {}).get("headers") or {}
+    token = headers.get("x-tfy-feedback-target-id")
+    if not token:
+        return None
+    try:
+        return json.loads(base64.b64decode(token)).get("traceId")
+    except Exception:
+        return None
+
+
 def _record_call(tlog, run_id_get, trace_base_url, *, raw, model, latency_ms):
     """Best-effort: record one telemetry row. Never raises."""
     if tlog is None:
@@ -37,10 +54,11 @@ def _record_call(tlog, run_id_get, trace_base_url, *, raw, model, latency_ms):
     try:
         prompt, completion = _usage_from(raw)
         rid = _request_id_from(raw)
+        tid = _trace_id_from(raw)  # console deep-link keys on the OTEL trace id
         tlog.record(run_id_get(), model=model, prompt_tokens=prompt,
                     completion_tokens=completion, latency_ms=latency_ms,
                     cost=price(model, prompt, completion), request_id=rid,
-                    trace_url=build_trace_url(trace_base_url, rid))
+                    trace_url=build_trace_url(trace_base_url, tid))
     except Exception:
         pass
 

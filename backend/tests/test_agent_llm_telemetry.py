@@ -1,15 +1,27 @@
+import base64
+import json
+
 from lifeline.agent.llm import TFGatewayLLM, GatewayDrafter, Intent, DraftReply
 from lifeline.resilience.telemetry import TelemetryLog
 
 
+def _feedback_target(trace_id="trc_xyz", span_id="span_1"):
+    """Mimic the gateway's x-tfy-feedback-target-id header: base64 JSON."""
+    raw = json.dumps({"dataRoutingDestination": "default",
+                      "traceId": trace_id, "spanId": span_id}).encode()
+    return base64.b64encode(raw).decode()
+
+
 class _FakeRaw:
     """Mimics a langchain AIMessage carrying usage + id metadata."""
-    def __init__(self, model="aws-bedrock/...sonnet-4-6", with_usage=True):
+    def __init__(self, model="aws-bedrock/...sonnet-4-6", with_usage=True, trace_id="trc_xyz"):
         self.id = "req_abc"
         self.response_metadata = {"model_name": model,
                                   "token_usage": {"prompt_tokens": 100,
                                                   "completion_tokens": 40,
-                                                  "total_tokens": 140}}
+                                                  "total_tokens": 140},
+                                  "headers": {"x-tfy-feedback-target-id":
+                                              _feedback_target(trace_id)}}
         self.usage_metadata = {"input_tokens": 100, "output_tokens": 40,
                                "total_tokens": 140} if with_usage else None
 
@@ -37,14 +49,17 @@ def test_tf_gateway_llm_records_telemetry(monkeypatch):
     tlog = TelemetryLog()
     llm = TFGatewayLLM("http://gw", "k", "vm/main",
                        tlog=tlog, run_id_get=lambda: "r1",
-                       trace_base_url="https://app.tfy/traces")
+                       trace_base_url="https://t.truefoundry.cloud")
     out = llm.parse_intent("refill m_lisinopril for p_001")
     assert out.med_id == "m_lisinopril"
     row = tlog.by_run("r1")[0]
     assert row["prompt_tokens"] == 100 and row["completion_tokens"] == 40
     assert row["latency_ms"] is not None and row["latency_ms"] >= 0
     assert row["request_id"] == "req_abc"
-    assert row["trace_url"] == "https://app.tfy/traces/req_abc"
+    # deep-link keys on the OTEL trace id from the feedback-target header
+    assert row["trace_url"].startswith(
+        "https://t.truefoundry.cloud/monitoring/request-traces?filters=")
+    assert "trc_xyz" in row["trace_url"]
     assert row["cost"] is not None  # sonnet is priced
 
 
@@ -62,6 +77,20 @@ def test_gateway_drafter_records_telemetry(monkeypatch):
     assert row["trace_url"] is None      # no trace base configured
 
 
+def test_trace_url_none_without_feedback_header(monkeypatch):
+    intent = Intent(patient_id="p_001", request_type="refill", med_id="m_lisinopril")
+    raw = _FakeRaw()
+    raw.response_metadata["headers"] = {}     # no x-tfy-feedback-target-id
+    _patch(monkeypatch, intent, raw)
+    tlog = TelemetryLog()
+    llm = TFGatewayLLM("http://gw", "k", "vm/main", tlog=tlog, run_id_get=lambda: "r5",
+                       trace_base_url="https://t.truefoundry.cloud")
+    llm.parse_intent("x")
+    row = tlog.by_run("r5")[0]
+    assert row["trace_url"] is None        # numbers still recorded, link hides
+    assert row["prompt_tokens"] == 100
+
+
 def test_capture_never_raises_on_bad_metadata(monkeypatch):
     intent = Intent(patient_id="p_001", request_type="refill", med_id="m_lisinopril")
     _patch(monkeypatch, intent, _FakeRaw(with_usage=False))   # usage_metadata None
@@ -77,15 +106,15 @@ def test_capture_never_raises_on_bad_metadata(monkeypatch):
 def test_request_id_prefers_gateway_header(monkeypatch):
     intent = Intent(patient_id="p_001", request_type="refill", med_id="m_lisinopril")
     raw = _FakeRaw()
-    raw.response_metadata["headers"] = {"x-tfy-request-id": "tfy_req_42"}
+    raw.response_metadata["headers"]["x-tfy-request-id"] = "tfy_req_42"
     _patch(monkeypatch, intent, raw)
     tlog = TelemetryLog()
     llm = TFGatewayLLM("http://gw", "k", "vm/main", tlog=tlog, run_id_get=lambda: "r4",
-                       trace_base_url="https://app.tfy/traces")
+                       trace_base_url="https://t.truefoundry.cloud")
     llm.parse_intent("x")
     row = tlog.by_run("r4")[0]
     assert row["request_id"] == "tfy_req_42"           # header wins over raw.id
-    assert row["trace_url"] == "https://app.tfy/traces/tfy_req_42"
+    assert "trc_xyz" in row["trace_url"]               # trace id still from feedback header
 
 
 def test_clients_work_without_tlog(monkeypatch):
