@@ -32,7 +32,7 @@ Browser → Vercel (frontend)
 
 ## The hero patient
 
-Aditya Rawat (`p_001`) is on warfarin. He requests aspirin → additive bleeding risk →
+John Doe (`p_001`) is on warfarin. He requests aspirin → additive bleeding risk →
 the guardrail blocks → escalates to a pharmacist → acetaminophen alternative.
 
 ---
@@ -57,7 +57,7 @@ Each beat = a judging axis, a one-line "what to click", and the verified live re
 - **Proves:** tool failure → graceful degradation (queue, not crash) → recovery.
 
 ### Beat 3 — Guardrail block (Guardrails: block risky actions)
-- **Do:** `/patient` → submit **Aspirin** for Aditya (warfarin on chart).
+- **Do:** `/patient` → submit **Aspirin** for John (warfarin on chart).
 - **Live result:** `status: escalated`, `clinic_flag: "Do not auto-approve. additive
   bleeding risk"`, suggested alternative **Acetaminophen 500 mg**. The block travels over
   HTTP to `lifeline-guardrail`; the node **fails closed** (guardrail error → escalate).
@@ -81,7 +81,7 @@ Each beat = a judging axis, a one-line "what to click", and the verified live re
 
 ## Demo narration (suggested order)
 
-1. Open `/patient` (Aditya) and `/clinic` (Mercy General) side by side; show a clean refill
+1. Open `/patient` (John) and `/clinic` (Mercy General) side by side; show a clean refill
    flowing through to `approved` (live Bedrock model, tools via the MCP gateway).
 2. **Beat 3:** submit Aspirin → blocked → escalated; flip to `/clinic`, pharmacist approves
    the acetaminophen alternative; back on `/patient` the outcome updates.

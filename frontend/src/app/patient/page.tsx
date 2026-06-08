@@ -4,7 +4,6 @@ import { mutate } from "swr";
 import { LiveNodeList } from "@/components/patient/LiveNodeList";
 import { MedicationsTable } from "@/components/patient/MedicationsTable";
 import { OutcomeCard } from "@/components/patient/OutcomeCard";
-import { PatientShell } from "@/components/patient/PatientShell";
 import { RequestForm } from "@/components/patient/RequestForm";
 import { SideCards } from "@/components/patient/SideCards";
 import { StatCards } from "@/components/patient/StatCards";
@@ -45,10 +44,9 @@ export default function PatientPage() {
   };
 
   return (
-    <PatientShell>
-      <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto max-w-6xl space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Good morning, Aditya 👋</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Good morning, John 👋</h1>
           <p className="text-sm text-slate-400">{TODAY} · Here&apos;s your health overview</p>
         </div>
 
@@ -100,7 +98,6 @@ export default function PatientPage() {
           <SideCards />
         </div>
       </div>
-    </PatientShell>
   );
 }
 
