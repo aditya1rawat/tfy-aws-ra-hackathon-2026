@@ -278,18 +278,3 @@ bash backend/scripts/demo.sh kill-interaction
 - **Data** → NeonDB (Postgres), HydraDB (memory).
 
 See `docs/runbooks/do-deploy.md` and `docs/runbooks/tf-deploy.md`.
-
----
-
-## Demo
-
-A 3-minute walkthrough script lives in `docs/runbooks/demo-video-script-3min.md`, with the
-exhaustive per-beat reference (all live-verified results) in `demo-walkthrough-live.md`.
-
-The arc: a warfarin patient's unsafe aspirin request is **blocked and escalated** → a
-pharmacist approves a safe alternative → then chaos: an unsafe dose is **caught at the
-gateway**, the interaction service is **killed and the agent fails closed**, the gateway
-**reroutes a dead model**, and every gateway call's **real trace** is one click away. The
-resilience ledger fills with a row for every failure handled.
-
-> *An agent built to stay up when everything else falls down.*
