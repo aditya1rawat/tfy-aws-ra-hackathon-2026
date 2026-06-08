@@ -34,6 +34,10 @@ services:
         value: "aws-bedrock/global.anthropic.claude-haiku-4-5-20251001-v1-0"
       - key: GUARDRAIL_URL
         value: "https://lifeline-guardrail-amdnu.ondigitalocean.app"
+      # Console host root for the "View trace ↗" deep-link in /xray. The bridge
+      # appends /monitoring/request-traces?filters=... keyed on the OTEL traceId.
+      - key: TF_TRACE_BASE_URL
+        value: "https://adityarawat.truefoundry.cloud"
       # Routed through the TF MCP Gateway (auth: TF_API_KEY bearer): tool calls are
       # audited + scoped at the gateway, and insurer_cancel_auth is disabled there
       # (the scoped-permission beat). Falls back to the raw DO mcp URL if needed:

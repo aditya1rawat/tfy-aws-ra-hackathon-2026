@@ -324,17 +324,23 @@ line in the event stream — each with a **View trace ↗** deep-link into TFY M
   telemetry miss never affects the run; latency is always recorded, tokens/cost/url degrade to `null`.
 - **Offline:** the `PatternLLM`/`TemplatedDrafter` path records nothing → panel shows "No live gateway
   calls yet". Real telemetry needs `USE_TF=true` (live bridge).
-- **Deep-link:** set `TF_TRACE_BASE_URL` on the bridge to the console trace URL prefix; `trace_url` =
-  `<base>/<request-id>`. Request-id prefers a gateway header (`x-tfy-request-id`/`x-request-id`/…),
-  falling back to the langchain run id. With no base set, `trace_url` is `null` and the link hides.
+- **Deep-link:** set `TF_TRACE_BASE_URL` on the bridge to the console **host root**
+  (e.g. `https://<tenant>.truefoundry.cloud`). The bridge builds
+  `<base>/monitoring/request-traces?filters=<urlencoded {traceId IN [...]}>` — the console isolates a
+  trace by a `filters` query param, not a path segment. The **traceId** is the server-authoritative
+  OTEL id read from the `x-tfy-feedback-target-id` response header (base64 JSON `{traceId, spanId}`) —
+  NOT the numeric request-id, which is langchain/gateway-local and does not key the console. With no
+  base set (or no header), `trace_url` is `null` and the link hides; numbers still show.
 
 > **DEPLOYED-verified 2026-06-07** (prod bridge, live gateway): a lisinopril refill captured TWO real
 > gateway calls — intake parse (344+30 tok, 1900ms, $0.001482) + dosage draft (353+90 tok, 3610ms,
 > $0.002409), both `model: aws-bedrock/global.anthropic.claude-sonnet-4-6`; `/xray/telemetry` + the
-> per-run `telemetry` on `/xray/runs` both populate; `/demo/reset` clears. **Pending (deep-link only):**
-> set `TF_TRACE_BASE_URL` on the bridge + confirm the captured request-id resolves a TFY Monitoring
-> trace (Phase 0 step 2) so **View trace ↗** lands right. Numbers are live; only `trace_url` is null
-> until the base is set.
+> per-run `telemetry` on `/xray/runs` both populate; `/demo/reset` clears.
+>
+> **Deep-link verified 2026-06-08** (local live bridge): `TF_TRACE_BASE_URL=https://adityarawat.truefoundry.cloud`;
+> a clean lisinopril refill produced `trace_url=.../monitoring/request-traces?filters=…traceId…019ea4e1f10271889f8e0084e4eec688…`,
+> rendered as **View trace ↗** in the `/xray` Gateway telemetry panel. Set `TF_TRACE_BASE_URL` on the
+> **deployed** bridge (DO App Platform env) to enable the link in prod.
 
 ## Driving the recorded take (B3 demo controls)
 
