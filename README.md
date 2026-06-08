@@ -46,19 +46,19 @@ What the patient (John Doe) sees: request a refill, watch it get checked node-by
 the outcome. Here a warfarin patient's aspirin request is blocked and escalated with a safe
 alternative, while a lisinopril refill is approved.
 
-[Patient app](assets/patient.png)
+![Patient app](assets/patient.png)
 
 ### Clinic console (`/clinic`)
 What the pharmacist (M. Bailey, PharmD) sees: the queue of requests the agent triaged, a plain
 "what the agent did" reasoning trail, the safety flag, and approve / override / reject. The
 overnight-batch and resilience panels show the agent working at scale.
 
-[Clinic console](assets/clinic.png)
+![Clinic console](assets/clinic.png)
 
 ### X-ray / ops (`/xray`)
 The engineer's view, where resilience is made literal: live run, resilience ledger, gateway telemetry, audit trail, and the chaos controls that inject each failure.
 
-[XRay console](assets/xray.png)
+![XRay console](assets/xray.png)
 
 ---
 
@@ -135,7 +135,7 @@ routing sonnet→haiku). The app calls *one* model name; the gateway reroutes on
 failures. The `/xray` ledger records `gateway-failover · recovered → haiku` and the active-
 model panel flips to the served fallback. The app never noticed.
 
-[Gateway failover](assets/failover.png)
+![Gateway failover](assets/failover.png)
 
 **5. App-level model fallback (Kill LLM).**
 A second, independent layer: if the gateway itself is down, the agent's own `ResilientLLM`
@@ -171,7 +171,7 @@ Jobs, requests, and LangGraph checkpoints live in NeonDB. A full bridge redeploy
 preserves the queue (50 + 10 → 50 + 10). State survives infrastructure failure because it
 isn't in memory.
 
-[Batch at scale](assets/batch.png)
+![Batch at scale](assets/batch.png)
 
 **11. Cross-visit patient memory (degrade-safe).**
 A `recall` entry node pulls prior visit outcomes from HydraDB into the run; `finalize` writes
@@ -194,7 +194,7 @@ TrueFoundry's Monitoring console on the exact OTEL trace for that request. Real,
 
 The engineer's view, where resilience is made literal.
 
-[X-ray / ops](assets/xray.png)
+![X-ray / ops](assets/xray.png)
 
 - **Live run:** the agent pipeline animating node-by-node, the current node marked with a
   glowing indicator, completed nodes collapsing.
