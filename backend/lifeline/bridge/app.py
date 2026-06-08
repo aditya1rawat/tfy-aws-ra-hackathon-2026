@@ -155,8 +155,14 @@ def build_app(*, deps, store: JobStore, checkpointer, audit: AuditLog,
             med_id=req.med_id, raw_text=req.raw_text,
         )
 
+        # Persist in the worker thread (on_complete) so the run reaches the patient
+        # requests list, the clinic queue, and /xray even if the browser closes the
+        # SSE early — durability must not hinge on the client reading to the end.
+        def persist(terminal: dict) -> None:
+            request_store.add(thread_id, terminal)
+
         def gen():
-            for event in runner.stream(state, thread_id=thread_id):
+            for event in runner.stream(state, thread_id=thread_id, on_complete=persist):
                 yield f"data: {json.dumps(event)}\n\n"
 
         return StreamingResponse(gen(), media_type="text/event-stream")

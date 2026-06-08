@@ -56,6 +56,20 @@ def test_interactive_streams_sse_events(client):
     assert payloads[-1]["status"] == "done"
 
 
+def test_interactive_persists_run_to_requests_and_clinic(client):
+    # The streamed run must also land in the requests store so the clinic queue
+    # and patient requests list see it (the patient hero handoff depends on this).
+    with client.stream("POST", "/interactive", json={
+        "item_id": "persist1", "patient_id": "p_002", "request_type": "refill", "med_id": "m_ibuprofen",
+    }) as r:
+        assert r.status_code == 200
+        list(r.iter_lines())  # drain the stream so the post-loop persist runs
+    reqs = client.get("/patient/p_002/requests").json()["requests"]
+    assert any(q["request_id"] == "persist1" for q in reqs)
+    queue = client.get("/clinic/queue").json()["items"]
+    assert any(q["request_id"] == "persist1" for q in queue)
+
+
 def test_batch_seed_run_and_status(client):
     items = [{"item_id": f"item_{i:04d}", "patient_id": "p_002", "request_type": "refill",
               "med_id": "m_ibuprofen", "status": "pending"} for i in range(1, 4)]

@@ -66,6 +66,25 @@ export default function XrayPage() {
 			await mutate('/xray/resilience');
 		}
 	};
+	// Dose-hold hero: arm the dose-hallucination lever, then stream a lisinopril
+	// refill. The drafter overstates the dose (80 mg > 40 mg ceiling), the gateway
+	// dosage guardrail returns a 400, and the run escalates with the dosage-block
+	// beat — giving that gateway control a one-click UI trigger.
+	const onRunDose = async () => {
+		setBusy(true);
+		try {
+			await setDoseHallucinate(true);
+			await mutate('/system/state');
+			await stream.start({ patient_id: 'p_001', med_id: 'm_lisinopril', request_type: 'refill' });
+			notify('Dose-hold request complete');
+		} catch {
+			notifyError('Dose-hold run failed');
+		} finally {
+			setBusy(false);
+			await mutate('/xray/runs');
+			await mutate('/xray/resilience');
+		}
+	};
 	const onSeed = wrap(() => seedHero(), 'Hero seeded');
 	const onReset = wrap(() => resetDemo(), 'Demo reset');
 
@@ -87,7 +106,7 @@ export default function XrayPage() {
 			<div className='mb-3 flex items-center justify-between gap-3'>
 				<h1 className='font-bold'>🔬 Lifeline X-ray</h1>
 				<div className='flex flex-wrap items-center gap-2'>
-					<DemoBar busy={busy || stream.running} onRun={onRun} onSeed={onSeed} onReset={onReset} />
+					<DemoBar busy={busy || stream.running} onRun={onRun} onRunDose={onRunDose} onSeed={onSeed} onReset={onReset} />
 					<div className='mx-1 h-6 w-px bg-zinc-800' aria-hidden />
 					<ChaosControls
 						state={system}
