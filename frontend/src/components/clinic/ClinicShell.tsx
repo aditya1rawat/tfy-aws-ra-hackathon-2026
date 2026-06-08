@@ -132,9 +132,9 @@ function ProfileMenu() {
   return (
     <div className="relative">
       <button className="flex cursor-pointer items-center gap-2" aria-label="Account menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700">RO</div>
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 font-semibold text-blue-700">MB</div>
         <div className="hidden text-left text-sm leading-tight sm:block">
-          <div className="font-medium">R. Okafor</div>
+          <div className="font-medium">M. Bailey</div>
           <div className="text-xs text-slate-400">PharmD · on shift</div>
         </div>
       </button>

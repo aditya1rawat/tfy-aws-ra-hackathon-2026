@@ -11,7 +11,7 @@ export function SideCards() {
           </div>
           <div>
             <div className="text-sm font-medium">Anticoagulation review</div>
-            <div className="text-xs text-slate-400">10:30 AM · Dr. A. Patel</div>
+            <div className="text-xs text-slate-400">10:30 AM · Dr. M. Pierce</div>
           </div>
         </div>
         <button className="mt-4 w-full cursor-pointer rounded-lg border border-slate-200 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50">
@@ -23,12 +23,12 @@ export function SideCards() {
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h3 className="mb-3 text-sm font-semibold">From your care team</h3>
         <div className="flex gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sm font-semibold text-sky-700">RO</div>
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sm font-semibold text-sky-700">MB</div>
           <div>
             <div className="text-sm text-slate-700">
               &ldquo;Hi John — remember to keep your INR check appointment this week. Reach out with any questions.&rdquo;
             </div>
-            <div className="mt-1 text-xs text-slate-400">R. Okafor, PharmD · 2h ago</div>
+            <div className="mt-1 text-xs text-slate-400">M. Bailey, PharmD · 2h ago</div>
           </div>
         </div>
       </div>

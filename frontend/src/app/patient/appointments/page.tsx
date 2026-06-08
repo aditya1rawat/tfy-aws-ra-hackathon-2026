@@ -1,10 +1,10 @@
 const UPCOMING = [
-  { mon: "Jun", day: "12", title: "Anticoagulation review", with: "Dr. A. Patel", time: "10:30 AM", mode: "In person · Clinic 3B", tone: "emerald" },
+  { mon: "Jun", day: "12", title: "Anticoagulation review", with: "Dr. M. Pierce", time: "10:30 AM", mode: "In person · Clinic 3B", tone: "emerald" },
   { mon: "Jun", day: "26", title: "INR blood draw", with: "Mercy General Lab", time: "8:15 AM", mode: "Lab · no appointment needed", tone: "sky" },
 ];
 
 const PAST = [
-  { date: "May 14, 2026", title: "Blood pressure follow-up", with: "Dr. A. Patel", outcome: "Lisinopril continued" },
+  { date: "May 14, 2026", title: "Blood pressure follow-up", with: "Dr. M. Pierce", outcome: "Lisinopril continued" },
   { date: "Apr 30, 2026", title: "INR blood draw", with: "Mercy General Lab", outcome: "In range (2.4)" },
 ];
 

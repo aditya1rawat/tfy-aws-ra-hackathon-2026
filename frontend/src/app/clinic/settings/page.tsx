@@ -53,7 +53,7 @@ export default function SettingsPage() {
         <div className="border-b border-slate-100 px-5 py-3 text-sm font-semibold">Facility</div>
         <dl className="divide-y divide-slate-100 text-sm">
           <FieldRow label="Facility" value="Mercy General Hospital — Outpatient Pharmacy" />
-          <FieldRow label="Reviewing pharmacist" value="R. Okafor, PharmD" />
+          <FieldRow label="Reviewing pharmacist" value="M. Bailey, PharmD" />
           <FieldRow label="Gateway region" value="us-east · AWS Bedrock" />
         </dl>
       </div>

@@ -21,12 +21,12 @@ const THREADS: Thread[] = [
     ],
   },
   {
-    id: "t2", who: "Dr. A. Patel", initials: "AP", time: "1h", unread: true,
+    id: "t2", who: "Dr. M. Pierce", initials: "MP", time: "1h", unread: true,
     preview: "Please confirm the lisinopril hold for patient #100482.",
     body: ["Please confirm the lisinopril hold for patient #100482 until the dose review."],
   },
   {
-    id: "t3", who: "Bob Graham", initials: "BG", time: "3h", unread: false,
+    id: "t3", who: "Levi Schmitt", initials: "LS", time: "3h", unread: false,
     preview: "Refill went through, thank you for the quick turnaround.",
     body: ["Refill went through, thank you for the quick turnaround."],
   },

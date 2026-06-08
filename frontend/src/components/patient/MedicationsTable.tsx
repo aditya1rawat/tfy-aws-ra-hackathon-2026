@@ -1,6 +1,6 @@
 const MEDS = [
-  { name: "Warfarin", dose: "5 mg · once daily", prescriber: "Dr. A. Patel", refill: "Jun 18, 2026", refills: 12, status: "Active" },
-  { name: "Lisinopril", dose: "10 mg · once daily", prescriber: "Dr. A. Patel", refill: "Jul 02, 2026", refills: 3, status: "Active" },
+  { name: "Warfarin", dose: "5 mg · once daily", prescriber: "Dr. M. Pierce", refill: "Jun 18, 2026", refills: 12, status: "Active" },
+  { name: "Lisinopril", dose: "10 mg · once daily", prescriber: "Dr. M. Pierce", refill: "Jul 02, 2026", refills: 3, status: "Active" },
 ];
 
 export function MedicationsTable() {

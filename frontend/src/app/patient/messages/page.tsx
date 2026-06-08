@@ -9,9 +9,9 @@ interface Msg {
 }
 
 const SEED: Msg[] = [
-  { from: "care", author: "R. Okafor, PharmD", text: "Hi John — remember to keep your INR check appointment this week. Reach out with any questions.", time: "2h ago" },
+  { from: "care", author: "M. Bailey, PharmD", text: "Hi John — remember to keep your INR check appointment this week. Reach out with any questions.", time: "2h ago" },
   { from: "patient", author: "You", text: "Thanks! Should I keep taking warfarin at the same time each day?", time: "1h ago" },
-  { from: "care", author: "R. Okafor, PharmD", text: "Yes — same time daily keeps your levels steady. Evening with dinner is a good anchor.", time: "58m ago" },
+  { from: "care", author: "M. Bailey, PharmD", text: "Yes — same time daily keeps your levels steady. Evening with dinner is a good anchor.", time: "58m ago" },
 ];
 
 export default function PatientMessagesPage() {
@@ -36,7 +36,7 @@ export default function PatientMessagesPage() {
         {messages.map((m, i) => (
           <div key={i} className={`flex gap-3 ${m.from === "patient" ? "flex-row-reverse" : ""}`}>
             <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${m.from === "patient" ? "bg-emerald-100 text-emerald-700" : "bg-sky-100 text-sky-700"}`}>
-              {m.from === "patient" ? "JD" : "RO"}
+              {m.from === "patient" ? "JD" : "MB"}
             </div>
             <div className={`max-w-[75%] ${m.from === "patient" ? "text-right" : ""}`}>
               <div className={`rounded-2xl px-4 py-2 text-sm ${m.from === "patient" ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-700"}`}>
