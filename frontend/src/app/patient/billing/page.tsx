@@ -2,7 +2,7 @@ const CLAIMS = [
   { date: "Jun 02, 2026", desc: "Lisinopril 10 mg · 90-day supply", billed: "$42.00", you: "$10.00", status: "Covered" },
   { date: "May 18, 2026", desc: "Warfarin 5 mg · 90-day supply", billed: "$68.00", you: "$10.00", status: "Covered" },
   { date: "Apr 30, 2026", desc: "INR lab panel", billed: "$55.00", you: "$0.00", status: "Covered" },
-  { date: "Apr 02, 2026", desc: "Office visit · Dr. A. Patel", billed: "$180.00", you: "$25.00", status: "Covered" },
+  { date: "Apr 02, 2026", desc: "Office visit · Dr. M. Pierce", billed: "$180.00", you: "$25.00", status: "Covered" },
 ];
 
 const STATUS: Record<string, string> = {

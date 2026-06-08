@@ -15,7 +15,7 @@ const NAV = [
 
 const NOTIFICATIONS = [
   { icon: "✅", title: "Lisinopril refill approved", time: "12m ago", unread: true },
-  { icon: "💬", title: "New message from R. Okafor, PharmD", time: "2h ago", unread: true },
+  { icon: "💬", title: "New message from M. Bailey, PharmD", time: "2h ago", unread: true },
   { icon: "📅", title: "Anticoagulation review · Jun 12, 10:30 AM", time: "1d ago", unread: false },
 ];
 
