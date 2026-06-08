@@ -26,7 +26,7 @@ const THREADS: Thread[] = [
     body: ["Please confirm the lisinopril hold for patient #100482 until the dose review."],
   },
   {
-    id: "t3", who: "Bob Martinez", initials: "BM", time: "3h", unread: false,
+    id: "t3", who: "Bob Graham", initials: "BG", time: "3h", unread: false,
     preview: "Refill went through, thank you for the quick turnaround.",
     body: ["Refill went through, thank you for the quick turnaround."],
   },
